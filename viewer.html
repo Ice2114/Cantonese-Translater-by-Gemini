@@ -1,108 +1,229 @@
 <!DOCTYPE html>
-<html lang="zh-HK">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>即時翻譯字幕直播 (觀眾端)</title>
-    <!-- 引入 MQTT 雲端中繼庫 (穿透防火牆) -->
+    <title>Real-Time Live Translation (Viewer)</title>
+    <!-- MQTT Cloud Relay Library -->
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #121212; color: #ffffff; margin: 0; padding: 20px; box-sizing: border-box; }
-        .header { text-align: center; border-bottom: 1px solid #333; padding-bottom: 15px; margin-bottom: 15px; }
-        h1 { margin: 0; font-size: 1.5em; color: #3498db; }
-        .status { font-size: 0.9em; color: #f39c12; margin-top: 5px; }
+        * {
+            box-sizing: border-box;
+        }
         
-        .subtitle-box { max-width: 800px; margin: 0 auto; height: calc(100vh - 120px); overflow-y: auto; padding-right: 5px; }
-        .item { margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px; border-left: 4px solid #2ecc71; box-shadow: 0 2px 4px rgba(0,0,0,0.5); transition: all 0.3s; }
-        .time { font-size: 0.75em; color: #888; margin-bottom: 5px; }
-        .original { color: #bbb; font-size: 0.95em; margin-bottom: 6px; }
-        .english { color: #2ecc71; font-weight: bold; font-size: 1.25em; line-height: 1.4; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            color: #2c3e50;
+            
+            /* CDN Direct Background Image */
+            background-image: url('https://cdn.jsdelivr.net/gh/cskam-ops/school-app-assets@main/ITbackground.jpg');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            background-color: #1a252f;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.88);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .header {
+            text-align: center;
+            border-bottom: 2px solid rgba(52, 152, 219, 0.3);
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            color: #1a252f;
+        }
+
+        .room-badge {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 4px 12px;
+            background-color: #3498db;
+            color: white;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .live-box {
+            background: rgba(255, 255, 255, 0.95);
+            border-left: 5px solid #2ecc71;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        .live-title {
+            font-size: 13px;
+            color: #7f8c8d;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .live-content-zh {
+            font-size: 14px;
+            color: #7f8c8d;
+            margin-bottom: 6px;
+        }
+
+        .live-content-en {
+            font-size: 20px;
+            font-weight: bold;
+            color: #27ae60;
+            line-height: 1.4;
+        }
+
+        .history-box {
+            max-height: 450px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .log-item {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+            border: 1px solid #edf2f7;
+            transition: all 0.3s ease;
+        }
+
+        .time {
+            font-size: 12px;
+            color: #95a5a6;
+            margin-bottom: 4px;
+        }
+
+        .text-zh {
+            font-size: 14px;
+            color: #7f8c8d;
+            margin-bottom: 4px;
+        }
+
+        .text-en {
+            font-size: 16px;
+            font-weight: 600;
+            color: #2980b9;
+        }
+
+        .deleted-item {
+            text-decoration: line-through;
+            opacity: 0.4;
+            background: #e0e0e0;
+        }
+
+        .status-tag {
+            text-align: center;
+            font-size: 13px;
+            color: #7f8c8d;
+            margin-top: 15px;
+        }
     </style>
 </head>
 <body>
 
-    <div class="header">
-        <h1>📺 即時語音翻譯字幕直播</h1>
-        <div id="status" class="status">📡 正在連線至雲端伺服器...</div>
-    </div>
+    <div class="container">
+        <div class="header">
+            <h1>📺 Real-Time Speech Translation</h1>
+            <div id="roomBadge" class="room-badge">Connecting...</div>
+        </div>
 
-    <div class="subtitle-box" id="subtitleBox">
-        <div id="emptyTip" style="text-align: center; color: #666; margin-top: 50px;">等待講者發言中...</div>
+        <!-- Latest Live Translation -->
+        <div class="live-box">
+            <div class="live-title">⚡ LATEST TRANSLATION</div>
+            <div id="liveZh" class="live-content-zh">(Waiting for speaker...)</div>
+            <div id="liveEn" class="live-content-en">(Waiting for speaker...)</div>
+        </div>
+
+        <!-- Full Transcript -->
+        <h3 style="margin-bottom: 12px; color: #2c3e50;">📜 Full Transcript</h3>
+        <div id="historyBox" class="history-box">
+            <!-- Dynamic subtitle items -->
+        </div>
+
+        <div id="connStatus" class="status-tag">📡 Connecting to live channel...</div>
     </div>
 
     <script>
         const urlParams = new URLSearchParams(window.location.search);
-        let roomName = urlParams.get('room');
+        const roomId = urlParams.get('room') || 'room101';
+        
+        document.getElementById('roomBadge').textContent = `Room: ${roomId}`;
 
-        if (!roomName) {
-            roomName = prompt("請輸入講者的房間號碼：", "room101");
-        }
+        const topic = `company/trans/room/${roomId}`;
+        const connStatusEl = document.getElementById('connStatus');
 
-        const topic = `company/trans/room/${roomName ? roomName.trim() : "room101"}`;
-        const statusEl = document.getElementById('status');
-        const subtitleBox = document.getElementById('subtitleBox');
-        const emptyTip = document.getElementById('emptyTip');
-        let isFirstMessage = true;
+        const mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
-        function connectToSpeaker() {
-            statusEl.textContent = `📡 正在訂閱【${roomName}】雲端字幕頻道...`;
+        mqttClient.on('connect', () => {
+            connStatusEl.textContent = '🟢 Connected to live channel';
+            connStatusEl.style.color = '#2ecc71';
+            mqttClient.subscribe(topic);
+        });
 
-            const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+        mqttClient.on('error', () => {
+            connStatusEl.textContent = '🔴 Connection failed. Please refresh the page.';
+            connStatusEl.style.color = '#e74c3c';
+        });
 
-            client.on('connect', () => {
-                statusEl.textContent = `🟢 已成功連線至房間【${roomName}】，即時同步中`;
-                statusEl.style.color = "#2ecc71";
-                client.subscribe(topic);
-            });
+        mqttClient.on('message', (t, message) => {
+            try {
+                const data = JSON.parse(message.toString());
 
-            client.on('message', (t, message) => {
-                try {
-                    const data = JSON.parse(message.toString());
+                if (data.type === 'chat') {
+                    document.getElementById('liveZh').textContent = data.original;
+                    document.getElementById('liveEn').textContent = data.english;
 
-                    // 控制訊號：處理發射端的「撤回 / 恢復」
-                    if (data.type === 'control') {
-                        const targetEl = document.getElementById(`viewer-item-${data.id}`);
-                        if (targetEl) {
-                            if (data.action === 'delete') {
-                                targetEl.style.display = 'none';
-                            } else if (data.action === 'restore') {
-                                targetEl.style.display = 'block';
-                            }
-                        }
-                        return;
-                    }
-
-                    // 一般字幕訊息
-                    if (isFirstMessage) {
-                        if (emptyTip) emptyTip.style.display = 'none';
-                        isFirstMessage = false;
-                    }
-
+                    const historyBox = document.getElementById('historyBox');
                     const itemDiv = document.createElement('div');
-                    itemDiv.className = 'item';
-                    itemDiv.id = `viewer-item-${data.id}`;
+                    itemDiv.className = 'log-item';
+                    itemDiv.id = `msg-${data.id}`;
                     itemDiv.innerHTML = `
-                        <div class="time">[${data.time}]</div>
-                        <div class="original">🗣️ ${data.original}</div>
-                        <div class="english">🔤 ${data.english}</div>
+                        <div class="time">${data.time}</div>
+                        <div class="text-zh">Original: ${data.original}</div>
+                        <div class="text-en">English: ${data.english}</div>
                     `;
-                    subtitleBox.appendChild(itemDiv);
-
-                    requestAnimationFrame(() => {
-                        itemDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
-                    });
-                } catch(e) {
-                    console.error("解析失敗:", e);
+                    historyBox.appendChild(itemDiv);
+                    
+                    historyBox.scrollTop = historyBox.scrollHeight;
                 }
-            });
 
-            client.on('error', (err) => {
-                statusEl.textContent = `🔴 雲端頻道連線失敗，請確認網路！`;
-                statusEl.style.color = "#e74c3c";
-            });
-        }
-
-        connectToSpeaker();
+                if (data.type === 'control') {
+                    const targetEl = document.getElementById(`msg-${data.id}`);
+                    if (targetEl) {
+                        if (data.action === 'delete') {
+                            targetEl.classList.add('deleted-item');
+                        } else if (data.action === 'restore') {
+                            targetEl.classList.remove('deleted-item');
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to parse message", e);
+            }
+        });
     </script>
 </body>
 </html>
