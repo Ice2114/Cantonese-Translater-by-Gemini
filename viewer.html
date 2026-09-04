@@ -168,8 +168,20 @@
 
     <script>
         const urlParams = new URLSearchParams(window.location.search);
-        const roomId = urlParams.get('room') || 'room101';
-        
+        let roomId = urlParams.get('room');
+
+        // 加回彈窗提示：若網址無 room 參數則主動跳窗詢問
+        if (!roomId || !roomId.trim()) {
+            roomId = prompt("Please enter the Speaker's Room ID:", "room101");
+        }
+
+        // 避免使用者按取消或未輸入空值
+        if (!roomId || !roomId.trim()) {
+            roomId = "room101";
+        } else {
+            roomId = roomId.trim();
+        }
+
         document.getElementById('roomBadge').textContent = `Room: ${roomId}`;
 
         const topic = `company/trans/room/${roomId}`;
