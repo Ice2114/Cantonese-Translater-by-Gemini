@@ -101,13 +101,16 @@
 
     <div id="status" class="status">等待步驟完成...</div>
 
-    <!-- 即時狀態卡片 (含手動強制翻譯按鈕) -->
+    <!-- 即時狀態卡片 (含強制翻譯與重置按鈕) -->
     <div class="live-card">
         <div class="live-title"><span class="live-dot"></span> 語音辨識與翻譯狀態：</div>
         <div class="live-sub-box">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
                 <div><strong>🗣️ 正在收聽：</strong><span id="liveInterim" style="color: #d35400;">(等待發言...)</span></div>
-                <button class="btn" id="forceTranslateBtn" style="padding: 4px 10px; font-size: 12px; background-color: #e67e22;">⚡ 強制翻譯並發送</button>
+                <div style="display: flex; gap: 6px;">
+                    <button class="btn" id="forceTranslateBtn" style="padding: 4px 10px; font-size: 12px; background-color: #e67e22;">⚡ 強制翻譯並發送</button>
+                    <button class="btn" id="resetListenBtn" style="padding: 4px 10px; font-size: 12px; background-color: #7f8c8d;">🔄 重置</button>
+                </div>
             </div>
         </div>
         <div class="live-sub-box" style="margin-top: 8px;">
@@ -164,7 +167,6 @@
                 roomStatusEl.textContent = `🟢 房間【${roomVal}】雲端頻道已建立`;
                 roomStatusEl.style.color = "#2ecc71";
 
-                // 修正：精準的目錄相對路徑計算，確保網址 100% 正確
                 const baseURL = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
                 const viewerUrl = `${baseURL}viewer.html?room=${encodeURIComponent(roomVal)}`;
                 
@@ -278,15 +280,31 @@
             alert('瀏覽器不支援 Web Speech API，請改用 Chrome 或 Edge。');
         }
 
-        // 手動「強制翻譯並發送」按鈕
+        // 手動「⚡ 強制翻譯並發送」按鈕 (點擊後必然清空收聽欄)
         document.getElementById('forceTranslateBtn').addEventListener('click', () => {
-            if (latestInterimText && latestInterimText.trim() !== "") {
-                const textToSend = latestInterimText;
-                latestInterimText = "";
-                document.getElementById('liveInterim').textContent = '(等待發言...)';
+            const textToSend = latestInterimText;
+            
+            // 立即清空收聽欄暫存
+            latestInterimText = "";
+            document.getElementById('liveInterim').textContent = '(等待發言...)';
+
+            if (textToSend && textToSend.trim() !== "") {
                 processAndAppendText(textToSend);
-            } else {
-                alert("目前沒有聽到任何語音文字可供發送。");
+            }
+        });
+
+        // 新增「🔄 重置」按鈕 (點擊後清空暫存並重啟收音引擎)
+        document.getElementById('resetListenBtn').addEventListener('click', () => {
+            latestInterimText = "";
+            document.getElementById('liveInterim').textContent = '(已重置，等待發言...)';
+            
+            if (isRecording && recognition) {
+                try { recognition.stop(); } catch(e){}
+                setTimeout(() => {
+                    if (isRecording) {
+                        try { recognition.start(); } catch(e){}
+                    }
+                }, 200);
             }
         });
 
@@ -324,7 +342,7 @@
             const logEntry = { id: msgId, time: timeStamp, original: originalText, english: translatedText, isDeleted: false };
             fullTranscript.push(logEntry);
 
-            // 1. 本地顯示歷史紀錄 (加設刪除/劃掉按鈕)
+            // 1. 本地顯示歷史紀錄
             const logContentEl = document.getElementById('logContent');
             const itemDiv = document.createElement('div');
             itemDiv.className = 'log-item';
@@ -349,7 +367,7 @@
             }
         }
 
-        // 撤回 / 恢復邏輯 (發射端劃線，觀眾端同步隱藏)
+        // 撤回 / 恢復邏輯
         function toggleDelete(msgId) {
             const item = fullTranscript.find(x => x.id === msgId);
             const el = document.getElementById(`log-item-${msgId}`);
@@ -399,7 +417,6 @@
 
         document.getElementById('saveBtn').addEventListener('click', () => {
             let fileContent = "=== 語音即時翻譯紀錄 ===\n\n";
-            // 下載時自動跳過已被撤回的記錄
             fullTranscript.filter(item => !item.isDeleted).forEach(item => {
                 fileContent += `[${item.time}]\n原文: ${item.original}\n英文: ${item.english}\n\n`;
             });
