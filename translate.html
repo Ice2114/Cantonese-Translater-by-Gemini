@@ -3,49 +3,355 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>粵英混合語音即時翻譯器</title>
+    <title>即時翻譯控制台 // Cantonese-Translator Enterprise</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; max-width: 800px; margin: 30px auto; padding: 20px; background-color: #f4f7f6; color: #333; }
-        h1 { text-align: center; color: #2c3e50; }
-        .controls { display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; }
-        button { padding: 12px 24px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; transition: background 0.3s; }
-        #startBtn { background-color: #2ecc71; color: white; }
-        #startBtn:hover { background-color: #27ae60; }
-        #stopBtn { background-color: #e74c3c; color: white; }
-        #stopBtn:hover { background-color: #c0392b; }
-        #saveBtn { background-color: #3498db; color: white; }
-        #saveBtn:hover { background-color: #2980b9; }
-        button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
-        .status { text-align: center; font-weight: bold; margin-bottom: 15px; height: 20px; }
-        .recording { color: #e74c3c; }
-        .box-container { display: flex; flex-direction: column; gap: 15px; }
-        .box { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); min-height: 120px; max-height: 250px; overflow-y: auto; }
-        .box h3 { margin-top: 0; color: #34495e; border-bottom: 2px solid #ecf0f1; padding-bottom: 5px; }
-        .log-item { margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px dashed #eee; }
-        .time { font-size: 0.8em; color: #7f8c8d; margin-right: 8px; }
+        :root {
+            --bg-main: #f8fafc;
+            --card-bg: #ffffff;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --danger: #dc2626;
+            --danger-hover: #b91c1c;
+            --text-dark: #0f172a;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --accent-bg: #f1f5f9;
+            --success-color: #059669;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-dark);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 25px 15px;
+        }
+
+        .dashboard-container {
+            width: 100%;
+            max-width: 920px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.05);
+        }
+
+        /* 頂部列 */
+        .header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .nav-back {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            background: var(--accent-bg);
+            transition: all 0.2s;
+        }
+
+        .nav-back:hover {
+            color: var(--text-dark);
+            background: #e2e8f0;
+        }
+
+        .status-badge {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            background: var(--accent-bg);
+            border: 1px solid var(--border-color);
+        }
+
+        .status-badge.recording {
+            color: var(--danger);
+            background: #fef2f2;
+            border-color: #fecaca;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--text-muted);
+        }
+
+        .status-badge.recording .status-dot {
+            background-color: var(--danger);
+            animation: pulse 1.5s infinite;
+        }
+
+        h1 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        /* 控制按鈕組 */
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            border-radius: 6px;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        #startBtn {
+            background-color: var(--primary);
+            color: white;
+        }
+        #startBtn:hover:not(:disabled) {
+            background-color: var(--primary-hover);
+        }
+
+        #stopBtn {
+            background-color: white;
+            color: var(--danger);
+            border-color: #fca5a5;
+        }
+        #stopBtn:hover:not(:disabled) {
+            background-color: #fef2f2;
+        }
+
+        #saveBtn {
+            background-color: white;
+            color: var(--text-dark);
+            border-color: var(--border-color);
+        }
+        #saveBtn:hover:not(:disabled) {
+            background-color: var(--accent-bg);
+        }
+
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* 內容顯示卡片 */
+        .box-container {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .box {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 18px 20px;
+        }
+
+        .box-header {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #liveText {
+            font-size: 1rem;
+            min-height: 24px;
+            color: var(--text-dark);
+            font-weight: 500;
+        }
+
+        /* 逐字紀錄面板 */
+        #logContent {
+            height: 340px;
+            overflow-y: auto;
+            scroll-behavior: smooth;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding-right: 6px;
+        }
+
+        /* 自訂滾動條 */
+        #logContent::-webkit-scrollbar {
+            width: 6px;
+        }
+        #logContent::-webkit-scrollbar-track {
+            background: var(--bg-main);
+            border-radius: 4px;
+        }
+        #logContent::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        #logContent::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        /* 會議條目卡片 */
+        .log-item {
+            background: var(--bg-main);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 12px 16px;
+            animation: fadeIn 0.25s ease-out;
+        }
+
+        .log-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .log-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+
+        .log-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .lang-tag {
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            min-width: 64px;
+            text-align: center;
+            margin-top: 2px;
+        }
+
+        .lang-tag.zh {
+            background: #e0f2fe;
+            color: #0369a1;
+        }
+
+        .lang-tag.en {
+            background: #dcfce7;
+            color: #15803d;
+        }
+
+        .log-text {
+            font-size: 0.95rem;
+            line-height: 1.4;
+            color: var(--text-dark);
+            word-break: break-word;
+        }
+
+        .log-text.en-text {
+            font-weight: 600;
+            color: #0f172a;
+        }
+
+        .empty-log {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            text-align: center;
+            margin-top: 40px;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.4; }
+            100% { opacity: 1; }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @media (max-width: 600px) {
+            .dashboard-container { padding: 20px; }
+            h1 { font-size: 1.3rem; }
+            #logContent { height: 280px; }
+        }
     </style>
 </head>
 <body>
 
-    <h1>粵英混合語音即時翻譯紀錄器</h1>
-    
-    <div class="controls">
-        <button id="startBtn">開始錄音翻譯</button>
-        <button id="stopBtn" disabled>停止並生成紀錄</button>
-        <button id="saveBtn" disabled>下載文字紀錄 (.txt)</button>
-    </div>
-
-    <div id="status" class="status">準備就緒</div>
-
-    <div class="box-container">
-        <div class="box">
-            <h3>即時辨識與翻譯 (Live Translation)</h3>
-            <div id="liveText" style="color: #7f8c8d; font-style: italic;">等待語音輸入...</div>
+    <div class="dashboard-container">
+        <!-- 頂部導航 -->
+        <div class="header-bar">
+            <a href="index.html" class="nav-back">← 返回首頁 Home</a>
+            <div id="status" class="status-badge">
+                <span class="status-dot"></span>
+                <span>系統就緒 Ready</span>
+            </div>
         </div>
 
-        <div class="box">
-            <h3>完整逐字紀錄 (Full Transcript Log)</h3>
-            <div id="logContent"></div>
+        <h1>廣東話即時會議翻譯控制台</h1>
+
+        <!-- 按鈕控制組 -->
+        <div class="controls">
+            <button id="startBtn">▶ 開始錄音 Start</button>
+            <button id="stopBtn" disabled>⏹ 停止錄音 Stop</button>
+            <button id="saveBtn" disabled>⬇ 下載紀錄 (.txt)</button>
+        </div>
+
+        <div class="box-container">
+            <!-- 即時語音狀態 -->
+            <div class="box">
+                <div class="box-header">
+                    <span>即時語音監聽 (Live Audio Stream)</span>
+                </div>
+                <div id="liveText">等待語音輸入...</div>
+            </div>
+
+            <!-- 完整歷史對話面板 -->
+            <div class="box">
+                <div class="box-header">
+                    <span>逐字會議紀錄 (Transcript Log)</span>
+                </div>
+                <div id="logContent">
+                    <div class="empty-log">-- 暫無會議對話紀錄 --</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -69,13 +375,13 @@
             recognition = new SpeechRecognition();
             recognition.lang = 'zh-HK'; 
             
-            // 【核心修復 1】：改為單句模式，防止內存卡死
+            // 單句防卡死重置機制
             recognition.continuous = false; 
             recognition.interimResults = true;
 
             recognition.onstart = () => {
-                statusEl.textContent = '● 正在聆聽中...';
-                statusEl.classList.add('recording');
+                statusEl.className = 'status-badge recording';
+                statusEl.innerHTML = '<span class="status-dot"></span> 正在聆聽中... Listening';
             };
 
             recognition.onerror = (event) => {
@@ -87,20 +393,19 @@
             };
 
             recognition.onend = () => {
-                // 【核心修復 2】：單句結束（或超時）後自動完成乾淨重置，並重新啟動
                 if (isRecording) {
                     setTimeout(() => {
                         if (isRecording) {
                             try {
                                 recognition.start();
                             } catch(e) {
-                                console.log('引擎重啟中...', e);
+                                console.log('語音引擎自動重啟...', e);
                             }
                         }
-                    }, 100); // 100ms 緩衝足以清空 Chrome 內部語音 Buffer
+                    }, 100); 
                 } else {
-                    statusEl.textContent = '已停止錄音';
-                    statusEl.classList.remove('recording');
+                    statusEl.className = 'status-badge';
+                    statusEl.innerHTML = '<span class="status-dot"></span> 系統已停止 Stopped';
                 }
             };
 
@@ -109,10 +414,7 @@
                 for (let i = event.resultIndex; i < event.results.length; ++i) {
                     const transcriptText = event.results[i][0].transcript;
                     if (event.results[i].isFinal) {
-                        // 處理當前句子
                         processAndAppendText(transcriptText);
-                        
-                        // 【核心修復 3】：確定是一句完整發言後，主動切斷 trigger onend 重置
                         try {
                             recognition.stop();
                         } catch(e) {}
@@ -135,12 +437,12 @@
                 const translated = data.responseData.translatedText;
                 
                 if (translated.includes('MYMEMORY WARNING') || translated.includes('QUERY LENGTH LIMIT EXCEEDED')) {
-                    return `${text} (⚠️ API 翻譯額度上限)`; 
+                    return `${text} (⚠️ API 翻譯額度已達上限)`; 
                 }
                 
                 return translated || text;
             } catch (err) {
-                return `${text} (⚠️ 翻譯失敗)`; 
+                return `${text} (⚠️ 翻譯網絡異常)`; 
             }
         }
 
@@ -148,29 +450,56 @@
             if (!originalText.trim()) return;
 
             const timeStamp = new Date().toLocaleTimeString();
-            liveTextEl.textContent = `[處理中]: ${originalText}`;
+            liveTextEl.textContent = `[翻譯中...]: ${originalText}`;
             
             const translatedText = await translateToEnglish(originalText);
-            liveTextEl.textContent = `[最新翻譯]: ${translatedText}`;
+            liveTextEl.textContent = translatedText;
 
             const logEntry = { time: timeStamp, original: originalText, english: translatedText };
             fullTranscript.push(logEntry);
 
+            // 第一條紀錄出現時，先清空預設提示
+            if (fullTranscript.length === 1) {
+                logContentEl.innerHTML = '';
+            }
+
+            // 判斷使用者是否正在向上滾動閱讀舊紀錄
+            const isNearBottom = logContentEl.scrollHeight - logContentEl.scrollTop - logContentEl.clientHeight < 120;
+
+            // 渲染商務卡片條目
             const itemDiv = document.createElement('div');
             itemDiv.className = 'log-item';
-            itemDiv.innerHTML = `<span class="time">[${timeStamp}]</span> <strong>原文:</strong> ${originalText}<br>
-                                 <span class="time" style="visibility:hidden">[${timeStamp}]</span> <strong style="color:#2980b9;">英文:</strong> ${translatedText}`;
+            itemDiv.innerHTML = `
+                <div class="log-meta">
+                    <span>ITEM #${fullTranscript.length.toString().padStart(2, '0')}</span>
+                    <span>${timeStamp}</span>
+                </div>
+                <div class="log-row">
+                    <span class="lang-tag zh">粵語原文</span>
+                    <span class="log-text">${originalText}</span>
+                </div>
+                <div class="log-row">
+                    <span class="lang-tag en">英文翻譯</span>
+                    <span class="log-text en-text">${translatedText}</span>
+                </div>
+            `;
             logContentEl.appendChild(itemDiv);
             
-            logContentEl.scrollTop = logContentEl.scrollHeight;
+            // 智慧自動平滑滾動
+            if (isNearBottom || fullTranscript.length <= 3) {
+                logContentEl.scrollTo({
+                    top: logContentEl.scrollHeight,
+                    behavior: 'smooth'
+                });
+            }
         }
 
         startBtn.addEventListener('click', () => {
             if (!recognition) return;
             isRecording = true;
             fullTranscript = [];
-            logContentEl.innerHTML = '';
-            liveTextEl.textContent = '等待語音...';
+            logContentEl.innerHTML = '<div class="empty-log">-- 正在聆聽，請開始發言... --</div>';
+            liveTextEl.textContent = '等待語音輸入...';
             
             try {
                 recognition.start();
@@ -196,14 +525,16 @@
 
         saveBtn.addEventListener('click', () => {
             if (fullTranscript.length === 0) return;
-            let fileContent = "=== 粵英混合語音即時翻譯紀錄 ===\n\n";
-            fullTranscript.forEach(item => {
-                fileContent += `[${item.time}]\n原文: ${item.original}\n英文: ${item.english}\n\n`;
+            let fileContent = "=== 廣東話即時會議翻譯紀錄 (Cantonese-Translator Log) ===\n\n";
+            fullTranscript.forEach((item, index) => {
+                fileContent += `[${item.time}] ITEM #${index + 1}\n`;
+                fileContent += `粵語原文: ${item.original}\n`;
+                fileContent += `英文翻譯: ${item.english}\n\n`;
             });
             const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = `語音翻譯紀錄_${new Date().toISOString().slice(0,10)}.txt`;
+            a.download = `廣東話會議翻譯紀錄_${new Date().toISOString().slice(0,10)}.txt`;
             a.click();
         });
     </script>
