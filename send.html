@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>粵英語音即時翻譯機 (講者發射端)</title>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- 引入 MQTT 雲端中繼庫 (穿透防火牆) -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 850px; margin: 20px auto; padding: 20px; background-color: #f4f7f6; color: #333; }
         h1 { text-align: center; color: #2c3e50; margin-bottom: 25px; }
@@ -18,7 +19,7 @@
         .btn { padding: 8px 16px; font-size: 14px; background-color: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; }
         .btn:hover { background-color: #2980b9; }
         
-        .viewer-link-box { margin-top: 12px; padding: 10px; background: #eef6fc; border: 1px solid #bbee33; border-radius: 4px; display: none; }
+        .viewer-link-box { margin-top: 12px; padding: 10px; background: #eef6fc; border: 1px solid #3498db; border-radius: 4px; display: none; }
         .viewer-link-box a { color: #2980b9; font-weight: bold; word-break: break-all; }
 
         .status-banner { margin-top: 10px; padding: 10px; background: #fff8e1; border: 1px solid #ffe082; border-radius: 4px; font-weight: bold; color: #d35400; text-align: center; }
@@ -121,41 +122,32 @@
             return null;
         }
 
-        // 預設房間號碼 (隨機產生)
         const defaultRoom = "room" + Math.floor(1000 + Math.random() * 9000);
         document.getElementById('roomIdInput').value = defaultRoom;
 
-        let peer = null;
-        let connections = [];
+        let mqttClient = null;
+        let currentTopic = "";
         let isRoomReady = false;
 
-        // P2P 建立頻道
+        // MQTT 雲端頻道建立
         document.getElementById('createRoomBtn').addEventListener('click', () => {
             const roomVal = document.getElementById('roomIdInput').value.trim() || defaultRoom;
-            const fullBroadcastID = "company-trans-live-" + roomVal;
+            currentTopic = `company/trans/room/${roomVal}`;
             const roomStatusEl = document.getElementById('roomStatus');
 
-            if (peer) peer.destroy(); // 避免重複建立
+            if (mqttClient) mqttClient.end();
 
-            roomStatusEl.textContent = "📡 正在向 PeerJS 註冊頻道...";
+            roomStatusEl.textContent = "📡 正在連線至雲端 WebSocket 頻道...";
             roomStatusEl.style.color = "#e67e22";
 
-            peer = new Peer(fullBroadcastID, {
-    config: {
-        iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' }
-        ]
-    }
-});
+            // 使用 Port 8084 走標準 HTTPS SSL 加密，防止防火牆阻擋
+            mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
-            peer.on('open', () => {
+            mqttClient.on('connect', () => {
                 isRoomReady = true;
-                roomStatusEl.textContent = `🟢 房間【${roomVal}】建立成功！(線上觀眾：0 人)`;
+                roomStatusEl.textContent = `🟢 房間【${roomVal}】雲端頻道已建立 (已繞過防火牆限制)`;
                 roomStatusEl.style.color = "#2ecc71";
 
-                // 生成觀眾端網址
                 const viewerUrl = `${window.location.origin}${window.location.pathname.replace('index.html', '')}viewer.html?room=${encodeURIComponent(roomVal)}`;
                 const viewerLinkEl = document.getElementById('viewerLink');
                 viewerLinkEl.href = viewerUrl;
@@ -165,26 +157,16 @@
                 checkReadyState();
             });
 
-            peer.on('connection', (conn) => {
-                connections.push(conn);
-                roomStatusEl.textContent = `🟢 房間【${roomVal}】廣播中 (線上觀眾：${connections.length} 人)`;
-                
-                conn.on('close', () => {
-                    connections = connections.filter(c => c !== conn);
-                    roomStatusEl.textContent = `🟢 房間【${roomVal}】廣播中 (線上觀眾：${connections.length} 人)`;
-                });
-            });
-
-            peer.on('error', (err) => {
+            mqttClient.on('error', (err) => {
                 isRoomReady = false;
-                console.error("PeerJS Error:", err);
-                roomStatusEl.textContent = `🔴 房間號碼被佔用或連線失敗，請更換房間號碼後重試！`;
+                console.error("MQTT Error:", err);
+                roomStatusEl.textContent = `🔴 雲端連線失敗，請檢查網路狀態！`;
                 roomStatusEl.style.color = "#e74c3c";
                 checkReadyState();
             });
         });
 
-        // 翻譯 API 與狀態邏輯
+        // 翻譯 API 設定
         let currentEmail = '';
         let isModeSet = false;
         let totalCharsUsed = parseInt(getCookie('translator_total_chars') || '0', 10);
@@ -309,10 +291,10 @@
             logContentEl.appendChild(itemDiv);
             requestAnimationFrame(() => itemDiv.scrollIntoView({ behavior: 'smooth', block: 'end' }));
 
-            // 2. 廣播給所有觀眾
-            connections.forEach(conn => {
-                if (conn.open) conn.send(logEntry);
-            });
+            // 2. 推送到雲端 MQTT 通道發送給所有觀眾
+            if (mqttClient && mqttClient.connected) {
+                mqttClient.publish(currentTopic, JSON.stringify(logEntry));
+            }
         }
 
         document.getElementById('startBtn').addEventListener('click', () => {
