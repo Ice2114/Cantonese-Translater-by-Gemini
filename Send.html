@@ -1,0 +1,26 @@
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script>
+    // 1. 設定筆記本獨一無二的固定頻道 ID (建議改為隨機複雜字串避免衝突)
+    const BROADCAST_ID = "my-company-live-room-channel-2026";
+    const peer = new Peer(BROADCAST_ID);
+    let viewers = [];
+
+    // 2. 監聽來自 GitHub viewer.html 的觀眾連線
+    peer.on('connection', (conn) => {
+        viewers.push(conn);
+        console.log("新觀眾連入，當前觀看人數：", viewers.length);
+        
+        // 觀眾離線時自動清除紀錄
+        conn.on('close', () => {
+            viewers = viewers.filter(c => c !== conn);
+        });
+    });
+
+    // 3. 在 processAndAppendText 完成翻譯時調用此函式廣播
+    function broadcastSubtitle(time, originalText, englishText) {
+        const payload = { time, original: originalText, english: englishText };
+        viewers.forEach(conn => {
+            if (conn.open) conn.send(payload);
+        });
+    }
+</script>
