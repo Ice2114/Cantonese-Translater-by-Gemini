@@ -38,10 +38,13 @@
         .status { text-align: center; font-weight: bold; margin-bottom: 15px; height: 20px; }
         .recording { color: #e74c3c; }
 
-        .live-card { background: #eef6fc; border: 2px dashed #3498db; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-        .live-title { font-weight: bold; color: #2980b9; margin-bottom: 5px; display: flex; align-items: center; gap: 8px; }
+        /* 即時狀態區域優化 (獨立分框) */
+        .live-card { background: #ffffff; border: 2px dashed #3498db; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .live-title { font-weight: bold; color: #2980b9; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
         .live-dot { height: 10px; width: 10px; background-color: #e74c3c; border-radius: 50%; display: inline-block; animation: blink 1s infinite; }
         @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+
+        .live-sub-box { background: #f8f9fa; padding: 8px 12px; border-radius: 6px; font-size: 15px; word-break: break-all; }
 
         .history-box { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); height: 300px; overflow-y: auto; }
         .log-item { margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px dashed #eee; font-size: 15px; }
@@ -93,10 +96,15 @@
 
     <div id="status" class="status">等待步驟完成...</div>
 
-    <!-- 即時狀態卡片 -->
+    <!-- 即時狀態卡片 (拆分為獨立收聽與翻譯框) -->
     <div class="live-card">
-        <div class="live-title"><span class="live-dot"></span> 正在即時收音與翻譯：</div>
-        <div id="liveText" style="color: #555; font-style: italic;">請先完成上方步驟...</div>
+        <div class="live-title"><span class="live-dot"></span> 語音辨識與翻譯狀態：</div>
+        <div class="live-sub-box">
+            <strong>🗣️ 正在收聽：</strong><span id="liveInterim" style="color: #d35400;">(等待發言...)</span>
+        </div>
+        <div class="live-sub-box" style="margin-top: 8px;">
+            <strong>🔤 最新翻譯：</strong><span id="liveTranslation" style="color: #27ae60;">(尚無翻譯)</span>
+        </div>
     </div>
 
     <!-- 歷史紀錄 -->
@@ -140,7 +148,7 @@
             roomStatusEl.textContent = "📡 正在連線至雲端 WebSocket 頻道...";
             roomStatusEl.style.color = "#e67e22";
 
-            // 使用 Port 8084 走標準 HTTPS SSL 加密，防止防火牆阻擋
+            // 使用 Port 8084 走標準 HTTPS SSL 加密
             mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
             mqttClient.on('connect', () => {
@@ -203,7 +211,6 @@
             if (isRoomReady && isModeSet) {
                 startBtn.disabled = false;
                 document.getElementById('status').textContent = '準備就緒';
-                document.getElementById('liveText').textContent = '請點擊開始錄音...';
             } else {
                 startBtn.disabled = true;
             }
@@ -222,16 +229,28 @@
             recognition.interimResults = true;
 
             recognition.onstart = () => {
-                document.getElementById('status').textContent = '● 正在聆聽中...';
+                document.getElementById('status').textContent = '● 正在持續收音與聆聽中...';
                 document.getElementById('status').classList.add('recording');
             };
 
+            // 錯誤處理：捕獲靜音或網路暫斷，不讓程式崩潰
+            recognition.onerror = (event) => {
+                console.warn('語音辨識狀態:', event.error);
+            };
+
+            // 防中斷核心邏輯：斷開時自動重連
             recognition.onend = () => {
                 if (isRecording) {
-                    setTimeout(() => { if (isRecording) try{ recognition.start(); }catch(e){} }, 100);
+                    // 給予 300ms 安全緩衝，無縫重開收音
+                    setTimeout(() => {
+                        if (isRecording) {
+                            try { recognition.start(); } catch(e) {}
+                        }
+                    }, 300);
                 } else {
                     document.getElementById('status').textContent = '已停止錄音';
                     document.getElementById('status').classList.remove('recording');
+                    document.getElementById('liveInterim').textContent = '(已停止錄音)';
                 }
             };
 
@@ -240,12 +259,14 @@
                 for (let i = event.resultIndex; i < event.results.length; ++i) {
                     const text = event.results[i][0].transcript.trim();
                     if (event.results[i].isFinal) {
-                        if (text.length >= 2) processAndAppendText(text);
+                        if (text.length >= 1) processAndAppendText(text);
                     } else {
                         interim += text;
                     }
                 }
-                if (interim) document.getElementById('liveText').textContent = `[聆聽中]: ${interim}`;
+                if (interim) {
+                    document.getElementById('liveInterim').textContent = interim;
+                }
             };
         } else {
             alert('瀏覽器不支援 Web Speech API，請改用 Chrome 或 Edge。');
@@ -273,16 +294,20 @@
 
         async function processAndAppendText(originalText) {
             const timeStamp = new Date().toLocaleTimeString();
-            const liveTextEl = document.getElementById('liveText');
-            liveTextEl.textContent = `[翻譯中...]: ${originalText}`;
+            
+            // 清空正在收聽的暫存框，並提示正在翻譯
+            document.getElementById('liveInterim').textContent = '(等待發言...)';
+            document.getElementById('liveTranslation').textContent = `[翻譯中]: ${originalText}...`;
             
             const translatedText = await translateToEnglish(originalText);
-            liveTextEl.textContent = `[最新翻譯]: ${translatedText}`;
+            
+            // 更新最新翻譯框
+            document.getElementById('liveTranslation').textContent = `${originalText} ➔ ${translatedText}`;
 
             const logEntry = { time: timeStamp, original: originalText, english: translatedText };
             fullTranscript.push(logEntry);
 
-            // 1. 本地顯示
+            // 1. 本地顯示歷史紀錄
             const logContentEl = document.getElementById('logContent');
             const itemDiv = document.createElement('div');
             itemDiv.className = 'log-item';
@@ -302,6 +327,8 @@
             isRecording = true;
             fullTranscript = [];
             document.getElementById('logContent').innerHTML = '';
+            document.getElementById('liveInterim').textContent = '(等待發言...)';
+            document.getElementById('liveTranslation').textContent = '(尚無翻譯)';
             try { recognition.start(); } catch(e){}
             document.getElementById('startBtn').disabled = true;
             document.getElementById('stopBtn').disabled = false;
