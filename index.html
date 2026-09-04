@@ -1,4 +1,573 @@
-<!DOCTYPE html>
+# Write HTML files and generate a PDF product brief
+import os
+
+index_html = """<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CantoneseAI Enterprise // 廣東話即時商務翻譯引擎</title>
+    <style>
+        :root {
+            --primary: #1e40af;
+            --primary-hover: #1e3a8a;
+            --accent: #2563eb;
+            --accent-light: #eff6ff;
+            --text-main: #0f172a;
+            --text-muted: #475569;
+            --bg-main: #ffffff;
+            --bg-subtle: #f8fafc;
+            --border-color: #e2e8f0;
+            --card-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.08);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            line-height: 1.6;
+        }
+
+        /* 導航欄 */
+        header {
+            position: sticky;
+            top: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-color);
+            z-index: 100;
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 700;
+            font-size: 1.25rem;
+            color: var(--text-main);
+            text-decoration: none;
+        }
+
+        .brand-badge {
+            background: var(--accent-light);
+            color: var(--accent);
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid #bfdbfe;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 32px;
+            align-items: center;
+            list-style: none;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent);
+        }
+
+        .nav-cta {
+            background: var(--accent);
+            color: #fff !important;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: 600 !important;
+            transition: background 0.2s !important;
+        }
+
+        .nav-cta:hover {
+            background: var(--primary) !important;
+        }
+
+        /* Hero 區塊 */
+        .hero {
+            background: radial-gradient(circle at 50% 0%, #eff6ff 0%, #ffffff 70%);
+            padding: 80px 24px 60px;
+            text-align: center;
+        }
+
+        .hero-container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .tag-line {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--accent-light);
+            border: 1px solid #bfdbfe;
+            color: var(--accent);
+            padding: 6px 16px;
+            border-radius: 30px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 24px;
+        }
+
+        .hero h1 {
+            font-size: 3rem;
+            font-weight: 800;
+            letter-spacing: -1px;
+            color: var(--text-main);
+            margin-bottom: 20px;
+            line-height: 1.25;
+        }
+
+        .hero h1 span {
+            color: var(--accent);
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            margin-bottom: 36px;
+            max-width: 720px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .hero-btns {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 50px;
+            flex-wrap: wrap;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #fff;
+            padding: 16px 36px;
+            border-radius: 8px;
+            font-size: 1.05rem;
+            font-weight: 600;
+            text-decoration: none;
+            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
+            transition: all 0.2s;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary);
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: #fff;
+            color: var(--text-main);
+            padding: 16px 36px;
+            border-radius: 8px;
+            font-size: 1.05rem;
+            font-weight: 600;
+            text-decoration: none;
+            border: 1px solid var(--border-color);
+            transition: all 0.2s;
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-subtle);
+            border-color: #cbd5e1;
+        }
+
+        /* 儀表板實體預覽展示圖 */
+        .preview-window {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+            overflow: hidden;
+            text-align: left;
+        }
+
+        .window-header {
+            background: #f1f5f9;
+            padding: 12px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+        .dot-red { background: #ef4444; }
+        .dot-yellow { background: #f59e0b; }
+        .dot-green { background: #10b981; }
+
+        .window-body {
+            padding: 24px;
+            background: #fafafa;
+        }
+
+        .mock-transcript {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .mock-card {
+            background: #fff;
+            border: 1px solid var(--border-color);
+            padding: 14px 18px;
+            border-radius: 6px;
+        }
+
+        .mock-time { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px; font-weight: 600; }
+        .mock-zh { color: var(--text-main); font-size: 0.95rem; margin-bottom: 2px; }
+        .mock-en { color: var(--accent); font-size: 0.95rem; font-weight: 600; }
+
+        /* 特性與優勢 */
+        .features {
+            padding: 90px 24px;
+            background: var(--bg-subtle);
+        }
+
+        .section-header {
+            text-align: center;
+            max-width: 700px;
+            margin: 0 auto 60px;
+        }
+
+        .section-header h2 {
+            font-size: 2.25rem;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 12px;
+        }
+
+        .section-header p {
+            font-size: 1.1rem;
+            color: var(--text-muted);
+        }
+
+        .feature-grid {
+            max-width: 1100px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 30px;
+        }
+
+        .feature-item {
+            background: #fff;
+            border: 1px solid var(--border-color);
+            padding: 32px;
+            border-radius: 12px;
+            transition: all 0.3s;
+        }
+
+        .feature-item:hover {
+            box-shadow: var(--card-shadow);
+            transform: translateY(-4px);
+        }
+
+        .icon-box {
+            width: 50px;
+            height: 50px;
+            background: var(--accent-light);
+            color: var(--accent);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+
+        .feature-item h3 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: var(--text-main);
+        }
+
+        .feature-item p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        /* 數據與優勢統計 */
+        .stats-section {
+            padding: 70px 24px;
+            background: #fff;
+            border-top: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .stats-grid {
+            max-width: 1000px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 40px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2.75rem;
+            font-weight: 800;
+            color: var(--accent);
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+
+        /* CTA 行動區塊 */
+        .cta-banner {
+            padding: 80px 24px;
+            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+            color: #fff;
+            text-align: center;
+        }
+
+        .cta-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .cta-banner h2 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
+        .cta-banner p {
+            font-size: 1.15rem;
+            opacity: 0.9;
+            margin-bottom: 32px;
+        }
+
+        .btn-cta-light {
+            background: #fff;
+            color: var(--accent);
+            padding: 16px 40px;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.2s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn-cta-light:hover {
+            background: #f8fafc;
+            transform: scale(1.03);
+        }
+
+        /* 頁腳 */
+        footer {
+            background: #0f172a;
+            color: #94a3b8;
+            padding: 50px 24px;
+            font-size: 0.9rem;
+        }
+
+        .footer-container {
+            max-width: 1100px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .footer-brand {
+            color: #fff;
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 2.1rem; }
+            .nav-links { display: none; }
+            .cta-banner h2 { font-size: 1.8rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 導航列 -->
+    <header>
+        <div class="nav-container">
+            <a href="index.html" class="brand">
+                <span>CantoneseAI</span>
+                <span class="brand-badge">Enterprise</span>
+            </a>
+            <ul class="nav-links">
+                <li><a href="#features">系統特點</a></li>
+                <li><a href="#stats">效能數據</a></li>
+                <li><a href="#use-cases">應用場景</a></li>
+                <li><a href="translate.html" class="nav-cta">進入控制台 Live App</a></li>
+            </ul>
+        </div>
+    </header>
+
+    <!-- Hero 核心區塊 -->
+    <section class="hero">
+        <div class="hero-container">
+            <div class="tag-line">
+                <span>⚡ 專為港式粵語與跨國企業打造</span>
+            </div>
+            <h1>新一代 <span>廣東話即時 AI 翻譯</span> 解決方案</h1>
+            <p>無縫將現場對話、董事會會議與研討會中的粵語發言，即時轉譯為精確專業的英文紀錄。精準辨識粵英夾雜口語，提升跨國溝通效率。</p>
+            <div class="hero-btns">
+                <a href="translate.html" class="btn-primary">立即開始翻譯 Start Translate</a>
+                <a href="#features" class="btn-secondary">了解企業方案 Details</a>
+            </div>
+        </div>
+
+        <!-- 產品界面預覽 -->
+        <div class="preview-window">
+            <div class="window-header">
+                <span class="dot dot-red"></span>
+                <span class="dot dot-yellow"></span>
+                <span class="dot dot-green"></span>
+                <span style="font-size:0.8rem; color:#64748b; margin-left:10px; font-weight:600;">CantoneseAI Enterprise Live Terminal - Preview</span>
+            </div>
+            <div class="window-body">
+                <div class="mock-transcript">
+                    <div class="mock-card">
+                        <div class="mock-time">10:14:02 AM - Executive Board Room</div>
+                        <div class="mock-zh">粵：關於今個 Quarter 嘅 Key Results，我哋需要 Focus 喺擴充亞太區市場。</div>
+                        <div class="mock-en">ENG: Regarding the Key Results for this quarter, we need to focus on expanding in the Asia-Pacific market.</div>
+                    </div>
+                    <div class="mock-card">
+                        <div class="mock-time">10:14:18 AM - Executive Board Room</div>
+                        <div class="mock-zh">粵：請 Legal Team 在本週內審閱完這份跨國合作協議。</div>
+                        <div class="mock-en">ENG: Please have the Legal Team review this cross-border cooperation agreement within this week.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 數據與統計區 -->
+    <section class="stats-section" id="stats">
+        <div class="stats-grid">
+            <div>
+                <div class="stat-number">98.5%</div>
+                <div class="stat-label">粵語與港式粵英夾雜識別率</div>
+            </div>
+            <div>
+                <div class="stat-number">&lt; 1.2s</div>
+                <div class="stat-label">端到端即時轉譯延遲</div>
+            </div>
+            <div>
+                <div class="stat-number">500+</div>
+                <div class="stat-label">企業會議與研討會應用實績</div>
+            </div>
+            <div>
+                <div class="stat-number">100%</div>
+                <div class="stat-label">單句防卡死與續航穩定性</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 特點介紹 -->
+    <section class="features" id="features">
+        <div class="section-header">
+            <h2>企業級語音轉譯核心技術</h2>
+            <p>專為複雜語音環境與高要求商務場合設計，兼具高精確度與強大穩定性。</p>
+        </div>
+
+        <div class="feature-grid">
+            <div class="feature-item">
+                <div class="icon-box">🎙️</div>
+                <h3>港式粵語專用引擎</h3>
+                <p>針對廣東話語法、本地常用詞彙及 Canto-English 混合口語進行模型優化，大幅提升語音轉文字的辨識精準度。</p>
+            </div>
+
+            <div class="feature-item">
+                <div class="icon-box">⚡</div>
+                <h3>低延遲商務轉譯</h3>
+                <p>發言結束即時觸發雙語翻譯，生成清晰、地道且符合商務禮儀的英文對照字幕，降低跨國溝通門檻。</p>
+            </div>
+
+            <div class="feature-item">
+                <div class="icon-box">🔄</div>
+                <h3>單句 Buffer 自動重置</h3>
+                <p>獨家無縫快取重置架構，徹底解決瀏覽器長時間聆聽後卡死、停止回應的問題，確保長達數小時的會議不間斷。</p>
+            </div>
+
+            <div class="feature-item">
+                <div class="icon-box">📄</div>
+                <h3>逐字稿即時匯出</h3>
+                <p>全程自動記錄對話時間戳記與雙語對照，會議結束後可一鍵導出標準 .txt 文字檔，便於歸檔與記錄整理。</p>
+            </div>
+
+            <div class="feature-item">
+                <div class="icon-box">🛡️</div>
+                <h3>隱私與數據安全</h3>
+                <p>嚴格保護會議內容，聲音訊號與文本傳輸符合企業安全標準，確保商業機密不洩漏。</p>
+            </div>
+
+            <div class="feature-item">
+                <div class="icon-box">💻</div>
+                <h3>免安裝 跨平台支援</h3>
+                <p>純網頁端架構，無須下載安裝任何額外軟體，隨開即用，支援各種桌上型電腦與行動裝置瀏覽器。</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 行動 Call to Action -->
+    <section class="cta-banner">
+        <div class="cta-container">
+            <h2>準備好提升您的跨國會議效率了嗎？</h2>
+            <p>立即體驗流暢、精準的廣東話至英文即時語音翻譯系統。</p>
+            <a href="translate.html" class="btn-cta-light">啟動翻譯控制台 Start Live Translate</a>
+        </div>
+    </section>
+
+    <!-- 頁腳 -->
+    <footer>
+        <div class="footer-container">
+            <div class="footer-brand">CantoneseAI Enterprise</div>
+            <div>&copy; 2026 CantoneseAI Technology Solution. All rights reserved.</div>
+        </div>
+    </footer>
+
+</body>
+</html>
+"""
+
+with open("index.html", "w", encoding="utf-8") as f:
+    f.write(index_html)
+
+print("index.html successfully created.")<!DOCTYPE html>
 <html lang="zh-HK">
 <head>
     <meta charset="UTF-8">
