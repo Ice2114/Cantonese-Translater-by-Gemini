@@ -140,7 +140,15 @@
             roomStatusEl.textContent = "📡 正在向 PeerJS 註冊頻道...";
             roomStatusEl.style.color = "#e67e22";
 
-            peer = new Peer(fullBroadcastID);
+            peer = new Peer(fullBroadcastID, {
+    config: {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' }
+        ]
+    }
+});
 
             peer.on('open', () => {
                 isRoomReady = true;
