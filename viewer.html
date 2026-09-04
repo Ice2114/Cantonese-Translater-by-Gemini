@@ -13,7 +13,7 @@
         .status { font-size: 0.9em; color: #f39c12; margin-top: 5px; }
         
         .subtitle-box { max-width: 800px; margin: 0 auto; height: calc(100vh - 120px); overflow-y: auto; padding-right: 5px; }
-        .item { margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px; border-left: 4px solid #2ecc71; box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        .item { margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px; border-left: 4px solid #2ecc71; box-shadow: 0 2px 4px rgba(0,0,0,0.5); transition: all 0.3s; }
         .time { font-size: 0.75em; color: #888; margin-bottom: 5px; }
         .original { color: #bbb; font-size: 0.95em; margin-bottom: 6px; }
         .english { color: #2ecc71; font-weight: bold; font-size: 1.25em; line-height: 1.4; }
@@ -47,7 +47,6 @@
         function connectToSpeaker() {
             statusEl.textContent = `📡 正在訂閱【${roomName}】雲端字幕頻道...`;
 
-            // 使用 Port 8084 走標準 HTTPS SSL 加密
             const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
             client.on('connect', () => {
@@ -60,6 +59,20 @@
                 try {
                     const data = JSON.parse(message.toString());
 
+                    // 控制訊號：處理發射端的「撤回 / 恢復」
+                    if (data.type === 'control') {
+                        const targetEl = document.getElementById(`viewer-item-${data.id}`);
+                        if (targetEl) {
+                            if (data.action === 'delete') {
+                                targetEl.style.display = 'none';
+                            } else if (data.action === 'restore') {
+                                targetEl.style.display = 'block';
+                            }
+                        }
+                        return;
+                    }
+
+                    // 一般字幕訊息
                     if (isFirstMessage) {
                         if (emptyTip) emptyTip.style.display = 'none';
                         isFirstMessage = false;
@@ -67,6 +80,7 @@
 
                     const itemDiv = document.createElement('div');
                     itemDiv.className = 'item';
+                    itemDiv.id = `viewer-item-${data.id}`;
                     itemDiv.innerHTML = `
                         <div class="time">[${data.time}]</div>
                         <div class="original">🗣️ ${data.original}</div>
