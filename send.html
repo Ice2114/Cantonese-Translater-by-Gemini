@@ -83,7 +83,7 @@
         </div>
         <div class="row">
             <label><input type="radio" name="apiMode" id="radioEmail"> 個人電郵模式：</label>
-            <input type="email" id="userEmail" placeholder="請輸入 Email">
+            <input type="email" id="userEmail" placeholder="請輸入 Email (推薦輸入以避免被封鎖)">
             <button class="btn" id="confirmEmailBtn">確定電郵</button>
         </div>
         <div id="statusBanner" class="status-banner">⚠️ 尚未確定模式，請先確定以啟用翻譯。</div>
@@ -227,15 +227,15 @@
             }
         }
 
-        // Web Speech API - 長時間持續收聽 + 15字滑動緩衝區與屏蔽
+        // Web Speech API
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         let recognition;
         let isRecording = false;
         let fullTranscript = [];
         
         // 緩衝區控制
-        let pendingText = ""; // 尚未發送翻譯的累積文字
-        let silenceTimer = null; // 停頓計時器
+        let pendingText = ""; 
+        let silenceTimer = null;
 
         if (SpeechRecognition) {
             recognition = new SpeechRecognition();
@@ -256,7 +256,6 @@
             };
 
             recognition.onend = () => {
-                // 強制無縫重啟，不關閉麥克風
                 if (isRecording) {
                     setTimeout(() => {
                         if (isRecording) try { recognition.start(); } catch(e){}
@@ -282,11 +281,9 @@
 
                 let currentBuffer = (pendingText + interim).trim();
 
-                // 滿 15 個字立刻切片，並將 pendingText 扣除 15 個字 (實現屏蔽已翻譯項目)
                 if (currentBuffer.length >= 15) {
                     let textToTranslate = currentBuffer.substring(0, 15);
                     
-                    // 扣除已送出的 15 個字
                     if (pendingText.length >= 15) {
                         pendingText = pendingText.substring(15);
                     } else {
@@ -296,10 +293,8 @@
                     if (silenceTimer) clearTimeout(silenceTimer);
                     processAndAppendText(textToTranslate);
                     
-                    // 畫面即時更新剩餘未翻譯字數
                     document.getElementById('liveInterim').textContent = pendingText || "(正在收聽中...)";
                 } 
-                // 停頓 1.5 秒機制
                 else if (currentBuffer.length > 0) {
                     document.getElementById('liveInterim').textContent = currentBuffer;
                     if (silenceTimer) clearTimeout(silenceTimer);
@@ -317,7 +312,7 @@
             alert('瀏覽器不支援 Web Speech API，請改用 Chrome 或 Edge。');
         }
 
-        // 手動「⚡ 強制翻譯並發送」按鈕
+        // 手動按鈕
         document.getElementById('forceTranslateBtn').addEventListener('click', () => {
             if (silenceTimer) clearTimeout(silenceTimer);
             let currentBuffer = document.getElementById('liveInterim').textContent;
@@ -329,36 +324,32 @@
             }
         });
 
-        // 「🔄 重置」按鈕
         document.getElementById('resetListenBtn').addEventListener('click', () => {
             if (silenceTimer) clearTimeout(silenceTimer);
             pendingText = "";
             document.getElementById('liveInterim').textContent = '(已重置，等待發言...)';
         });
 
-        // ==================== 佇列與重試機制變數 ====================
-        let translationQueue = [];  // 待翻譯隊列
-        let isProcessingQueue = false; // 是否正在處理隊列中
+        // ==================== 佇列與防 Block 機制 ====================
+        let translationQueue = []; 
+        let isProcessingQueue = false;
 
-        // ==================== 1. MyMemory 原生 JSONP 翻譯 (100% 繞過 CORS) ====================
+        // 1. MyMemory 原生 JSONP 翻譯
         function translateWithMyMemory(text) {
             return new Promise((resolve) => {
                 if (!text || !text.trim()) return resolve(null);
 
                 const cleanText = text.trim();
                 if (/^\d+$/.test(cleanText.replace(/\s+/g, ''))) {
-                    return resolve(cleanText); // 純數字直接返回
+                    return resolve(cleanText); 
                 }
 
-                // 建立動態 JSONP Callback
                 const cbName = 'mm_cb_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
                 let emailParam = currentEmail ? `&de=${encodeURIComponent(currentEmail)}` : '';
                 const script = document.createElement('script');
                 
-                // MyMemory 原生支援 callback 參數
                 script.src = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(cleanText)}&langpair=zh-TW|en${emailParam}&callback=${cbName}`;
 
-                // 超時中斷 (3.5 秒無回應視為失敗，觸發隊列重試)
                 const timer = setTimeout(() => {
                     cleanup();
                     resolve(null);
@@ -395,18 +386,14 @@
             });
         }
 
-        // ==================== 2. 推入隊列入口 ====================
+        // 2. 推入隊列入口
         function processAndAppendText(originalText) {
             if (!originalText || !originalText.trim()) return;
-            
-            // 將文本推入待翻譯佇列
             translationQueue.push(originalText.trim());
-            
-            // 啟動隊列處理器
             processQueue();
         }
 
-        // ==================== 3. 佇列核心處理器 (失敗自動重試) ====================
+        // 3. 佇列核心處理器 (防止 API 封鎖與無限卡死)
         async function processQueue() {
             if (isProcessingQueue || translationQueue.length === 0) return;
 
@@ -417,26 +404,32 @@
             
             let translatedText = null;
             let retryCount = 0;
+            const maxRetries = 3; // 最多重試 3 次，防止被封鎖 IP
 
-            // 🔄 循環重試：直到成功翻譯為止，絕不拋出失敗給觀眾
-            while (translatedText === null) {
+            while (translatedText === null && retryCount < maxRetries) {
                 retryCount++;
                 if (retryCount === 1) {
                     liveTranslationEl.textContent = `⏳ [翻譯中]: ${originalText}...`;
                 } else {
-                    liveTranslationEl.textContent = `🔄 [重試第 ${retryCount - 1} 次]: ${originalText}...`;
+                    liveTranslationEl.textContent = `⚠️ [API卡頓，第 ${retryCount - 1} 次重試]: ${originalText}...`;
                 }
 
                 translatedText = await translateWithMyMemory(originalText);
 
-                // 若失敗，等待 1.2 秒後再重試
-                if (translatedText === null) {
-                    await new Promise(resolve => setTimeout(resolve, 1200));
+                // 使用漸進式拉長時間 (指數退避)，避開連續衝擊 API
+                if (translatedText === null && retryCount < maxRetries) {
+                    const backoffTime = retryCount * 2000; // 2秒, 4秒 遞增
+                    await new Promise(resolve => setTimeout(resolve, backoffTime));
                 }
             }
 
-            // 成功獲得翻譯結果！將已完成項目自隊列移除
             translationQueue.shift();
+
+            // 若 3 次重試接連失敗，降級處理以順暢執行下一句
+            if (translatedText === null) {
+                translatedText = `${originalText} (連線逾時)`;
+                console.warn(`[MyMemory] 語句 "${originalText}" 翻譯失敗，自動跳過以防被 Block。`);
+            }
 
             // 更新介面
             liveTranslationEl.textContent = `${originalText} ➔ ${translatedText}`;
@@ -461,7 +454,7 @@
             logContentEl.appendChild(itemDiv);
             requestAnimationFrame(() => itemDiv.scrollIntoView({ behavior: 'smooth', block: 'end' }));
 
-            // 2. 僅在【翻譯成功】時發送給觀眾端
+            // 2. 發送給觀眾端
             if (mqttClient && mqttClient.connected) {
                 mqttClient.publish(currentTopic, JSON.stringify({
                     type: 'chat',
@@ -472,7 +465,6 @@
                 }));
             }
 
-            // 標記當前任務完成，繼續處理隊列中的下一句
             isProcessingQueue = false;
             processQueue();
         }
