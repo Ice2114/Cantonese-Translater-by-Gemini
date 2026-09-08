@@ -229,40 +229,31 @@
             }
         }
 
-        // Web Speech API
+        // Web Speech API - 雙引擎交替接力機制
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        let recognition;
+        let recA, recB;
+        let activeEngine = 'A';
         let isRecording = false;
         let fullTranscript = [];
+        let autoResetInterval = null;
 
-        if (SpeechRecognition) {
-            recognition = new SpeechRecognition();
-            recognition.lang = 'zh-HK';
-            recognition.continuous = true;
-            recognition.interimResults = true;
+        function createRecognitionInstance() {
+            if (!SpeechRecognition) return null;
+            const instance = new SpeechRecognition();
+            instance.lang = 'zh-HK';
+            instance.continuous = true;
+            instance.interimResults = true;
 
-            recognition.onstart = () => {
-                document.getElementById('status').textContent = '● 正在持續收音與聆聽中...';
+            instance.onstart = () => {
+                document.getElementById('status').textContent = '● 正在持續收音與聆聽中 (雙引擎模式)...';
                 document.getElementById('status').classList.add('recording');
             };
 
-            recognition.onerror = (event) => {
+            instance.onerror = (event) => {
                 console.warn('語音辨識狀態:', event.error);
             };
 
-            recognition.onend = () => {
-                if (isRecording) {
-                    setTimeout(() => {
-                        if (isRecording) try { recognition.start(); } catch(e) {}
-                    }, 300);
-                } else {
-                    document.getElementById('status').textContent = '已停止錄音';
-                    document.getElementById('status').classList.remove('recording');
-                    document.getElementById('liveInterim').textContent = '(已停止錄音)';
-                }
-            };
-
-            recognition.onresult = (event) => {
+            instance.onresult = (event) => {
                 let interim = '';
                 for (let i = event.resultIndex; i < event.results.length; ++i) {
                     const text = event.results[i][0].transcript.trim();
@@ -277,39 +268,41 @@
                     document.getElementById('liveInterim').textContent = interim;
                 }
             };
+
+            return instance;
+        }
+
+        if (SpeechRecognition) {
+            recA = createRecognitionInstance();
+            recB = createRecognitionInstance();
         } else {
             alert('瀏覽器不支援 Web Speech API，請改用 Chrome 或 Edge。');
         }
 
-        // 手動「⚡ 強制翻譯並發送」按鈕 (點擊後必然清空收聽欄)
-        document.getElementById('forceTranslateBtn').addEventListener('click', () => {
-            resetAutoTimer();
-            const textToSend = latestInterimText;
-            
-            // 立即清空收聽欄暫存
-            latestInterimText = "";
-            document.getElementById('liveInterim').textContent = '(等待發言...)';
+        // 啟動/重置 8 秒雙引擎平滑切換定時器 (第 7 秒開啟新引擎，第 8 秒關閉舊引擎)
+        function resetAutoTimer() {
+            if (autoResetInterval) clearInterval(autoResetInterval);
+            if (!isRecording) return;
 
-            if (textToSend && textToSend.trim() !== "") {
-                processAndAppendText(textToSend);
-            }
-        });
+            autoResetInterval = setInterval(() => {
+                if (!isRecording) return;
 
-        // 新增「🔄 重置」按鈕 (點擊後清空暫存並重啟收音引擎)
-        document.getElementById('resetListenBtn').addEventListener('click', () => {
-            resetAutoTimer();
-            latestInterimText = "";
-            document.getElementById('liveInterim').textContent = '(已重置，等待發言...)';
-            
-            if (isRecording && recognition) {
-                try { recognition.stop(); } catch(e){}
+                // 第 7 秒：預熱下一個引擎並開始收聽（提前記錄下一句，覆蓋0.2秒斷點）
+                const nextEngine = (activeEngine === 'A') ? recB : recA;
+                const currentEngine = (activeEngine === 'A') ? recA : recB;
+
+                try { nextEngine.start(); } catch(e){}
+
+                // 滿 8 秒 (延遲 1000ms)：平滑切換並將舊引擎平緩停止
                 setTimeout(() => {
-                    if (isRecording) {
-                        try { recognition.start(); } catch(e){}
-                    }
-                }, 200);
-            }
-        });
+                    activeEngine = (activeEngine === 'A') ? 'B' : 'A';
+                    try { currentEngine.stop(); } catch(e){}
+                    latestInterimText = "";
+                    document.getElementById('liveInterim').textContent = '(無縫接力中...)';
+                }, 1000);
+
+            }, 7000); // 7 秒觸發接力預熱
+        }
 
         // 啟動/重置 8 秒定時器
         function resetAutoTimer() {
