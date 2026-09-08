@@ -58,7 +58,7 @@
 </head>
 <body>
 
-    <h1>🎙️ 粵英語音即時翻譯機 (發射端)</h1>
+    <h1>🎙️ 粵英語音即時翻譯機 (講者發射端)</h1>
 
     <!-- 步驟一：房間設定 -->
     <div class="card room-box">
@@ -106,7 +106,7 @@
         <div class="live-title"><span class="live-dot"></span> 語音辨識與翻譯狀態：</div>
         <div class="live-sub-box">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-                <div><strong>🗣️ 正在收聽：</strong><span id="liveInterim" style="color: #d35400;">(等待發言...)</span></div>
+                <div><strong>🗣️ 正在收聽 (未翻譯)：</strong><span id="liveInterim" style="color: #d35400;">(等待發言...)</span></div>
                 <div style="display: flex; gap: 6px;">
                     <button class="btn" id="forceTranslateBtn" style="padding: 4px 10px; font-size: 12px; background-color: #e67e22;">⚡ 強制翻譯並發送</button>
                     <button class="btn" id="resetListenBtn" style="padding: 4px 10px; font-size: 12px; background-color: #7f8c8d;">🔄 重置</button>
@@ -147,7 +147,6 @@
         let mqttClient = null;
         let currentTopic = "";
         let isRoomReady = false;
-        let latestInterimText = ""; // 紀錄最新的語音暫存
 
         // MQTT 雲端頻道建立
         document.getElementById('createRoomBtn').addEventListener('click', () => {
@@ -228,109 +227,103 @@
             }
         }
 
-        // Web Speech API - 雙引擎交替接力機制
+        // Web Speech API - 長時間持續收聽 + 15字滑動緩衝區機制
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        let recA, recB;
-        let activeEngine = 'A';
+        let recognition;
         let isRecording = false;
         let fullTranscript = [];
-        let autoResetInterval = null;
+        
+        // 滑動游標控制變數
+        let accumulatedFinalText = ""; // 已經變為 Final 的全局文字
+        let translatedIndex = 0;        // 游標：紀錄「已發送翻譯」的字數位置
 
-        function createRecognitionInstance() {
-            if (!SpeechRecognition) return null;
-            const instance = new SpeechRecognition();
-            instance.lang = 'zh-HK';
-            instance.continuous = true;
-            instance.interimResults = true;
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.lang = 'zh-HK';
+            recognition.continuous = true;
+            recognition.interimResults = true;
 
-            instance.onstart = () => {
-                document.getElementById('status').textContent = '● 正在持續收音與聆聽中 (雙引擎模式)...';
+            recognition.onstart = () => {
+                document.getElementById('status').textContent = '● 正在持續收音中 (15字滑動翻譯模式)...';
                 document.getElementById('status').classList.add('recording');
             };
 
-            instance.onerror = (event) => {
+            recognition.onerror = (event) => {
                 console.warn('語音辨識狀態:', event.error);
-            };
-
-            instance.onresult = (event) => {
-                let interim = '';
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    const text = event.results[i][0].transcript.trim();
-                    if (event.results[i].isFinal) {
-                        if (text.length >= 1) processAndAppendText(text);
-                    } else {
-                        interim += text;
-                    }
-                }
-                if (interim) {
-                    latestInterimText = interim;
-                    document.getElementById('liveInterim').textContent = interim;
+                // 排除手動停止，若網路抖動斷線則自動瞬間無縫重啟，保持麥克風開啟
+                if (isRecording && event.error !== 'aborted') {
+                    setTimeout(() => { if (isRecording) try { recognition.start(); } catch(e){} }, 100);
                 }
             };
 
-            return instance;
-        }
+            recognition.onend = () => {
+                // 自動無縫續接：語音引擎自然結束時立即重啟，不讓麥克風關閉
+                if (isRecording) {
+                    setTimeout(() => {
+                        if (isRecording) try { recognition.start(); } catch(e){}
+                    }, 50);
+                } else {
+                    document.getElementById('status').textContent = '已停止錄音';
+                    document.getElementById('status').classList.remove('recording');
+                    document.getElementById('liveInterim').textContent = '(已停止錄音)';
+                }
+            };
 
-        if (SpeechRecognition) {
-            recA = createRecognitionInstance();
-            recB = createRecognitionInstance();
+            recognition.onresult = (event) => {
+                let currentTotal = "";
+                
+                // 拼接所有識別結果
+                for (let i = 0; i < event.results.length; ++i) {
+                    currentTotal += event.results[i][0].transcript;
+                }
+
+                accumulatedFinalText = currentTotal;
+
+                // 計算當前「尚未翻譯」的字串內容
+                let untranslatedText = accumulatedFinalText.substring(translatedIndex).trim();
+
+                // 更新界面顯示（僅顯示尚未翻譯的文字，實現「屏蔽已翻譯項目」）
+                document.getElementById('liveInterim').textContent = untranslatedText || "(正在收聽中...)";
+
+                // 核心邏輯：只要「未翻譯內容」達到或超過 15 個字，即刻進行翻譯切片
+                if (untranslatedText.length >= 15) {
+                    // 擷取前 15 個字進行翻譯
+                    let chunkToTranslate = untranslatedText.substring(0, 15);
+                    
+                    // 游標前移 15 個字，屏蔽已翻譯內容
+                    translatedIndex += chunkToTranslate.length;
+                    
+                    // 發送翻譯
+                    processAndAppendText(chunkToTranslate);
+
+                    // 重新更新畫面上剩餘未翻譯的部分
+                    let remainingText = accumulatedFinalText.substring(translatedIndex).trim();
+                    document.getElementById('liveInterim').textContent = remainingText || "(等待發言...)";
+                }
+            };
         } else {
             alert('瀏覽器不支援 Web Speech API，請改用 Chrome 或 Edge。');
         }
 
-        // 啟動/重置 8 秒雙引擎平滑切換定時器 (第 7 秒開啟新引擎，第 8 秒關閉舊引擎)
-        function resetAutoTimer() {
-            if (autoResetInterval) clearInterval(autoResetInterval);
-            if (!isRecording) return;
-
-            autoResetInterval = setInterval(() => {
-                if (!isRecording) return;
-
-                // 第 7 秒：預熱下一個引擎並開始收聽（提前記錄下一句，覆蓋0.2秒斷點）
-                const nextEngine = (activeEngine === 'A') ? recB : recA;
-                const currentEngine = (activeEngine === 'A') ? recA : recB;
-
-                try { nextEngine.start(); } catch(e){}
-
-                // 滿 8 秒 (延遲 1000ms)：平滑切換並將舊引擎平緩停止
-                setTimeout(() => {
-                    activeEngine = (activeEngine === 'A') ? 'B' : 'A';
-                    try { currentEngine.stop(); } catch(e){}
-                    latestInterimText = "";
-                    document.getElementById('liveInterim').textContent = '(無縫接力中...)';
-                }, 1000);
-
-            }, 7000); // 7 秒觸發接力預熱
-        }
-
-        // 手動「⚡ 強制翻譯並發送」按鈕 (點擊後必然清空收聽欄)
+        // 手動「⚡ 強制翻譯並發送」按鈕（將目前剩餘未滿15字的未翻譯內容立刻送出）
         document.getElementById('forceTranslateBtn').addEventListener('click', () => {
-            resetAutoTimer();
-            const textToSend = latestInterimText;
-            
-            // 立即清空收聽欄暫存
-            latestInterimText = "";
-            document.getElementById('liveInterim').textContent = '(等待發言...)';
+            let untranslatedText = accumulatedFinalText.substring(translatedIndex).trim();
 
-            if (textToSend && textToSend.trim() !== "") {
-                processAndAppendText(textToSend);
+            if (untranslatedText.length > 0) {
+                translatedIndex += untranslatedText.length;
+                processAndAppendText(untranslatedText);
+                document.getElementById('liveInterim').textContent = '(等待發言...)';
             }
         });
 
-        // 新增「🔄 重置」按鈕 (點擊後清空暫存並重啟收音引擎)
+        // 「🔄 重置」按鈕 (清空游標與緩衝區，重置識別狀態)
         document.getElementById('resetListenBtn').addEventListener('click', () => {
-            resetAutoTimer();
-            latestInterimText = "";
-            document.getElementById('liveInterim').textContent = '(已重置，等待發言...)';
+            accumulatedFinalText = "";
+            translatedIndex = 0;
+            document.getElementById('liveInterim').textContent = '(已重置緩衝區，等待發言...)';
             
-            const currentEngine = (activeEngine === 'A') ? recA : recB;
-            if (isRecording && currentEngine) {
-                try { currentEngine.stop(); } catch(e){}
-                setTimeout(() => {
-                    if (isRecording) {
-                        try { currentEngine.start(); } catch(e){}
-                    }
-                }, 200);
+            if (isRecording && recognition) {
+                try { recognition.stop(); } catch(e){}
             }
         });
 
@@ -355,12 +348,9 @@
         }
 
         async function processAndAppendText(originalText) {
-            resetAutoTimer();
             const timeStamp = new Date().toLocaleTimeString();
             const msgId = 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
             
-            latestInterimText = "";
-            document.getElementById('liveInterim').textContent = '(等待發言...)';
             document.getElementById('liveTranslation').textContent = `[翻譯中]: ${originalText}...`;
             
             const translatedText = await translateToEnglish(originalText);
@@ -422,15 +412,15 @@
         window.toggleDelete = toggleDelete;
 
         document.getElementById('startBtn').addEventListener('click', () => {
-            if (!recA || !recB) return;
+            if (!recognition) return;
             isRecording = true;
-            activeEngine = 'A';
+            accumulatedFinalText = "";
+            translatedIndex = 0;
             fullTranscript = [];
             document.getElementById('logContent').innerHTML = '';
             document.getElementById('liveInterim').textContent = '(等待發言...)';
             document.getElementById('liveTranslation').textContent = '(尚無翻譯)';
-            try { recA.start(); } catch(e){}
-            resetAutoTimer();
+            try { recognition.start(); } catch(e){}
             document.getElementById('startBtn').disabled = true;
             document.getElementById('stopBtn').disabled = false;
             document.getElementById('saveBtn').disabled = true;
@@ -438,12 +428,15 @@
 
         document.getElementById('stopBtn').addEventListener('click', () => {
             isRecording = false;
-            if (autoResetInterval) {
-                clearInterval(autoResetInterval);
-                autoResetInterval = null;
+            try { recognition.stop(); } catch(e){}
+            
+            // 停止時若還有未滿15字的殘留發言，自動做最後一次翻譯發送
+            let remainingText = accumulatedFinalText.substring(translatedIndex).trim();
+            if (remainingText.length > 0) {
+                translatedIndex += remainingText.length;
+                processAndAppendText(remainingText);
             }
-            try { recA.stop(); } catch(e){}
-            try { recB.stop(); } catch(e){}
+
             document.getElementById('status').textContent = '已停止錄音';
             document.getElementById('status').classList.remove('recording');
             document.getElementById('liveInterim').textContent = '(已停止錄音)';
