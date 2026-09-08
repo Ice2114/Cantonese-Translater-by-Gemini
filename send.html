@@ -7,23 +7,16 @@
     <!-- 引入 MQTT 雲端中繼庫 -->
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
-        /* 基礎樣式設定 */
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 850px; margin: 20px auto; padding: 20px; background-color: #f4f7f6; color: #333; }
         h1 { text-align: center; color: #2c3e50; margin-bottom: 25px; }
         .card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.08); }
         .room-box { border-left: 5px solid #3498db; }
-        
-        /* 表單與按鈕樣式 */
         .row { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
         input[type="text"] { padding: 8px 12px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; flex-grow: 1; max-width: 280px; }
         .btn { padding: 8px 16px; font-size: 14px; background-color: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; }
         .btn:hover { background-color: #2980b9; }
-        
-        /* 觀眾連結區塊 */
         .viewer-link-box { margin-top: 12px; padding: 10px; background: #eef6fc; border: 1px solid #3498db; border-radius: 4px; display: none; }
         .viewer-link-box a { color: #2980b9; font-weight: bold; word-break: break-all; }
-
-        /* 錄音控制按鈕 */
         .controls { display: flex; justify-content: center; gap: 15px; margin: 20px 0; }
         button.action-btn { padding: 12px 24px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; transition: background 0.3s; }
         #startBtn { background-color: #2ecc71; color: white; }
@@ -33,24 +26,16 @@
         #saveBtn { background-color: #3498db; color: white; }
         #saveBtn:hover { background-color: #2980b9; }
         button:disabled { background-color: #bdc3c7 !important; cursor: not-allowed; opacity: 0.7; }
-
-        /* 狀態文字與動畫 */
         .status { text-align: center; font-weight: bold; margin-bottom: 15px; height: 20px; }
         .recording { color: #e74c3c; }
-
-        /* 即時狀態卡片 */
         .live-card { background: #ffffff; border: 2px dashed #3498db; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
         .live-title { font-weight: bold; color: #2980b9; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
         .live-dot { height: 10px; width: 10px; background-color: #e74c3c; border-radius: 50%; display: inline-block; animation: blink 1s infinite; }
         @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
         .live-sub-box { background: #f8f9fa; padding: 8px 12px; border-radius: 6px; font-size: 15px; word-break: break-all; }
-
-        /* 歷史紀錄區塊 */
         .history-box { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); height: 320px; overflow-y: auto; }
         .log-item { margin-bottom: 10px; padding: 8px; border-bottom: 1px dashed #eee; font-size: 15px; border-radius: 4px; transition: all 0.2s; position: relative; }
         .time { font-size: 0.8em; color: #7f8c8d; }
-        
-        /* 撤回樣式 */
         .deleted-item { text-decoration: line-through; opacity: 0.45; background-color: #f2f2f2; }
         .btn-del { padding: 4px 8px; font-size: 12px; background-color: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; float: right; }
         .btn-del.restore { background-color: #27ae60; }
@@ -251,26 +236,21 @@
             resetAutoTimer(); 
         });
 
-        // 使用 Google Gemini API (透過代理伺服器突破香港地區限制)
+        // 🚀 使用 Google Gemini API (1.5 Flash 模型 - 直連版)
         async function translateToEnglish(text) {
-           const GEMINI_API_KEY = 'AQ.Ab8RN6JSGxwyY7IgbO7HlI6B2wGsTWGWqkGf_4mgPAyNCR99-g';
+            // ⚠️ 請將引號內的文字替換為你唯一的 Gemini API 金鑰
+            const GEMINI_API_KEY = 'AQ.Ab8RN6JSGxwyY7IgbO7HIl6B2wGsTWGWqkGf_4mgPAyNCR99-g';
             
-            // 原始的 Google API 網址
-            const targetUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-            
-            // 🚀 關鍵破解：套上一層 corsproxy 代理伺服器，讓 Google 以為請求來自海外
-            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
             try {
-                const response = await fetch(proxyUrl, {
+                const response = await fetch(url, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         contents: [{
                             parts: [{
-                                text: `請將以下這段廣東話口語翻譯成自然、流暢的英文。請注意，直接輸出英文翻譯結果就好，絕對不要包含任何解釋、引號或其他廢話：\n\n${text}`
+                                text: `請將以下這段廣東話口語翻譯成自然、流暢的英文。直接輸出英文翻譯結果就好，絕對不要包含任何解釋、引號或其他廢話：\n\n${text}`
                             }]
                         }],
                         generationConfig: {
@@ -292,7 +272,6 @@
                 }
                 
                 return text;
-
             } catch (err) {
                 console.error("Gemini 翻譯失敗:", err);
                 return `${text} (⚠️ AI翻譯失敗: ${err.message})`;
@@ -396,459 +375,6 @@
 
         document.getElementById('saveBtn').addEventListener('click', () => {
             let fileContent = "=== 語音即時翻譯紀錄 ===\n\n";
-            fullTranscript.filter(item => !item.isDeleted).forEach(item => {
-                fileContent += `[${item.time}]\n原文: ${item.original}\n英文: ${item.english}\n\n`;
-            });
-            const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = `翻譯紀錄_${new Date().toISOString().slice(0,10)}.txt`;
-            a.click();
-        });
-    </script>
-</body>
-</html><!DOCTYPE html>
-<html lang="zh-HK">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>粵英語音即時翻譯機 (講者發射端)</title>
-    <!-- 引入 MQTT 雲端中繼庫 (穿透防火牆) -->
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
-    <style>
-        /* 基礎樣式設定 */
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 850px; margin: 20px auto; padding: 20px; background-color: #f4f7f6; color: #333; }
-        h1 { text-align: center; color: #2c3e50; margin-bottom: 25px; }
-        .card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.08); }
-        .room-box { border-left: 5px solid #3498db; }
-        
-        /* 表單與按鈕樣式 */
-        .row { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
-        input[type="text"] { padding: 8px 12px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; flex-grow: 1; max-width: 280px; }
-        .btn { padding: 8px 16px; font-size: 14px; background-color: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        .btn:hover { background-color: #2980b9; }
-        
-        /* 觀眾連結區塊 */
-        .viewer-link-box { margin-top: 12px; padding: 10px; background: #eef6fc; border: 1px solid #3498db; border-radius: 4px; display: none; }
-        .viewer-link-box a { color: #2980b9; font-weight: bold; word-break: break-all; }
-
-        /* 錄音控制按鈕 */
-        .controls { display: flex; justify-content: center; gap: 15px; margin: 20px 0; }
-        button.action-btn { padding: 12px 24px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; transition: background 0.3s; }
-        #startBtn { background-color: #2ecc71; color: white; }
-        #startBtn:hover { background-color: #27ae60; }
-        #stopBtn { background-color: #e74c3c; color: white; }
-        #stopBtn:hover { background-color: #c0392b; }
-        #saveBtn { background-color: #3498db; color: white; }
-        #saveBtn:hover { background-color: #2980b9; }
-        button:disabled { background-color: #bdc3c7 !important; cursor: not-allowed; opacity: 0.7; }
-
-        /* 狀態文字與動畫 */
-        .status { text-align: center; font-weight: bold; margin-bottom: 15px; height: 20px; }
-        .recording { color: #e74c3c; }
-
-        /* 即時狀態卡片 */
-        .live-card { background: #ffffff; border: 2px dashed #3498db; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-        .live-title { font-weight: bold; color: #2980b9; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
-        .live-dot { height: 10px; width: 10px; background-color: #e74c3c; border-radius: 50%; display: inline-block; animation: blink 1s infinite; }
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
-        .live-sub-box { background: #f8f9fa; padding: 8px 12px; border-radius: 6px; font-size: 15px; word-break: break-all; }
-
-        /* 歷史紀錄區塊 */
-        .history-box { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); height: 320px; overflow-y: auto; }
-        .log-item { margin-bottom: 10px; padding: 8px; border-bottom: 1px dashed #eee; font-size: 15px; border-radius: 4px; transition: all 0.2s; position: relative; }
-        .time { font-size: 0.8em; color: #7f8c8d; }
-        
-        /* 撤回樣式 */
-        .deleted-item { text-decoration: line-through; opacity: 0.45; background-color: #f2f2f2; }
-        .btn-del { padding: 4px 8px; font-size: 12px; background-color: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; float: right; }
-        .btn-del.restore { background-color: #27ae60; }
-    </style>
-</head>
-<body>
-
-    <h1>🎙️ 粵英語音即時翻譯機 (發射端)</h1>
-
-    <!-- 步驟一：房間設定 -->
-    <div class="card room-box">
-        <strong>📡 步驟 1：設定直播房間號碼</strong>
-        <div class="row">
-            <input type="text" id="roomIdInput" placeholder="請輸入房間號碼 (例如: room101)">
-            <button class="btn" id="createRoomBtn">建立/開啟房間</button>
-        </div>
-        <div id="roomStatus" style="margin-top:8px; font-weight:bold; color:#7f8c8d;">狀態：尚未建立房間</div>
-        
-        <div id="viewerLinkBox" class="viewer-link-box">
-            🔗 觀眾分享網址：<a id="viewerLink" href="#" target="_blank"></a>
-        </div>
-    </div>
-
-    <!-- 控制按鈕 -->
-    <div class="controls">
-        <button id="startBtn" class="action-btn" disabled>開始錄音翻譯</button>
-        <button id="stopBtn" class="action-btn" disabled>停止並生成紀錄</button>
-        <button id="saveBtn" class="action-btn" disabled>下載紀錄 (.txt)</button>
-    </div>
-
-    <div id="status" class="status">等待連線完成...</div>
-
-    <!-- 即時狀態卡片 (含強制翻譯與重置按鈕) -->
-    <div class="live-card">
-        <div class="live-title"><span class="live-dot"></span> 語音辨識與翻譯狀態 (每8秒自動重置)：</div>
-        <div class="live-sub-box">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-                <div><strong>🗣️ 正在收聽：</strong><span id="liveInterim" style="color: #d35400;">(等待發言...)</span></div>
-                <div style="display: flex; gap: 6px;">
-                    <button class="btn" id="forceTranslateBtn" style="padding: 4px 10px; font-size: 12px; background-color: #e67e22;">⚡ 強制翻譯並發送</button>
-                    <button class="btn" id="resetListenBtn" style="padding: 4px 10px; font-size: 12px; background-color: #7f8c8d;">🔄 手動重置</button>
-                </div>
-            </div>
-        </div>
-        <div class="live-sub-box" style="margin-top: 8px;">
-            <strong>🔤 最新翻譯：</strong><span id="liveTranslation" style="color: #27ae60;">(尚無翻譯)</span>
-        </div>
-    </div>
-
-    <!-- 歷史紀錄 -->
-    <div class="history-box">
-        <h3 style="margin-top:0; color:#34495e;">📜 逐字翻譯紀錄</h3>
-        <div id="logContent"></div>
-    </div>
-
-    <script>
-        // 隨機生成預設房間號碼
-        const defaultRoom = "room" + Math.floor(1000 + Math.random() * 9000);
-        document.getElementById('roomIdInput').value = defaultRoom;
-
-        // 全域變數
-        let mqttClient = null;
-        let currentTopic = "";
-        let isRoomReady = false;
-        let latestInterimText = ""; // 紀錄最新的語音暫存
-        let autoResetInterval = null; // 8秒自動重置的計時器
-
-        // 檢查是否可以啟用「開始錄音」按鈕
-        function checkReadyState() {
-            const startBtn = document.getElementById('startBtn');
-            if (isRoomReady) {
-                startBtn.disabled = false;
-                document.getElementById('status').textContent = '準備就緒';
-            } else {
-                startBtn.disabled = true;
-            }
-        }
-
-        // MQTT 雲端頻道建立 (建立房間)
-        document.getElementById('createRoomBtn').addEventListener('click', () => {
-            const roomVal = document.getElementById('roomIdInput').value.trim() || defaultRoom;
-            currentTopic = `company/trans/room/${roomVal}`; // 設定訂閱的主題路徑
-            const roomStatusEl = document.getElementById('roomStatus');
-
-            if (mqttClient) mqttClient.end(); // 若已連線則先斷開舊連線
-
-            roomStatusEl.textContent = "📡 正在連線至雲端 WebSocket 頻道...";
-            roomStatusEl.style.color = "#e67e22";
-
-            // 連線至免費的公共 MQTT Broker (EMQX)
-            mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
-
-            mqttClient.on('connect', () => {
-                isRoomReady = true;
-                roomStatusEl.textContent = `🟢 房間【${roomVal}】雲端頻道已建立`;
-                roomStatusEl.style.color = "#2ecc71";
-
-                // 自動生成觀眾端網址
-                const baseURL = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
-                const viewerUrl = `${baseURL}viewer.html?room=${encodeURIComponent(roomVal)}`;
-                
-                const viewerLinkEl = document.getElementById('viewerLink');
-                viewerLinkEl.href = viewerUrl;
-                viewerLinkEl.textContent = viewerUrl;
-                document.getElementById('viewerLinkBox').style.display = 'block';
-
-                checkReadyState();
-            });
-
-            mqttClient.on('error', (err) => {
-                isRoomReady = false;
-                roomStatusEl.textContent = `🔴 雲端連線失敗，請檢查網路狀態！`;
-                roomStatusEl.style.color = "#e74c3c";
-                checkReadyState();
-            });
-        });
-
-        // Web Speech API (語音辨識核心)
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        let recognition;
-        let isRecording = false;
-        let fullTranscript = [];
-
-        if (SpeechRecognition) {
-            recognition = new SpeechRecognition();
-            // 這裡必須用 zh-HK，因為這是給瀏覽器麥克風「聽懂」廣東話的參數
-            recognition.lang = 'zh-HK';
-            recognition.continuous = true; // 持續監聽
-            recognition.interimResults = true; // 允許回傳未完成的語音片段 (即時反饋)
-
-            recognition.onstart = () => {
-                document.getElementById('status').textContent = '● 正在持續收音與聆聽中...';
-                document.getElementById('status').classList.add('recording');
-            };
-
-            recognition.onerror = (event) => {
-                console.warn('語音辨識狀態:', event.error);
-            };
-
-            // 當語音引擎意外中斷時，自動重啟以保持連續錄音
-            recognition.onend = () => {
-                if (isRecording) {
-                    setTimeout(() => {
-                        if (isRecording) try { recognition.start(); } catch(e) {}
-                    }, 300);
-                } else {
-                    document.getElementById('status').textContent = '已停止錄音';
-                    document.getElementById('status').classList.remove('recording');
-                    document.getElementById('liveInterim').textContent = '(已停止錄音)';
-                }
-            };
-
-            // 當接收到語音結果時
-            recognition.onresult = (event) => {
-                let interim = '';
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    const text = event.results[i][0].transcript.trim();
-                    if (event.results[i].isFinal) {
-                        // 如果這段話已經講完 (產生句點)，觸發翻譯流程
-                        if (text.length >= 1) processAndAppendText(text);
-                    } else {
-                        // 否則放入暫存區 (即時顯示正在聽的字)
-                        interim += text;
-                    }
-                }
-                if (interim) {
-                    latestInterimText = interim;
-                    document.getElementById('liveInterim').textContent = interim;
-                }
-            };
-        } else {
-            alert('瀏覽器不支援 Web Speech API，請改用 Chrome 或 Edge。');
-        }
-
-        // 重置收音引擎的核心函式 (供手動與自動呼叫)
-        function resetRecognition() {
-            latestInterimText = "";
-            document.getElementById('liveInterim').textContent = '(已重置，等待發言...)';
-            
-            if (isRecording && recognition) {
-                try { recognition.stop(); } catch(e){}
-                setTimeout(() => {
-                    if (isRecording) {
-                        try { recognition.start(); } catch(e){}
-                    }
-                }, 200);
-            }
-        }
-
-        // 設定/重置 8 秒自動重置計時器
-        // 作用：防止講者說話停頓太久，導致語音卡在「未完成(interim)」狀態發不出去
-        function resetAutoTimer() {
-            if (autoResetInterval) clearInterval(autoResetInterval);
-            if (isRecording) {
-                autoResetInterval = setInterval(() => {
-                    console.log("8秒自動重置觸發");
-                    resetRecognition();
-                }, 8000);
-            }
-        }
-
-        // 手動「⚡ 強制翻譯並發送」按鈕
-        document.getElementById('forceTranslateBtn').addEventListener('click', () => {
-            const textToSend = latestInterimText;
-            
-            // 立即清空收聽欄暫存並重置 8 秒計時
-            latestInterimText = "";
-            document.getElementById('liveInterim').textContent = '(等待發言...)';
-            resetAutoTimer();
-
-            // 若暫存區有文字，立刻發送去翻譯
-            if (textToSend && textToSend.trim() !== "") {
-                processAndAppendText(textToSend);
-            }
-        });
-
-        // 手動「🔄 重置」按鈕
-        document.getElementById('resetListenBtn').addEventListener('click', () => {
-            resetRecognition();
-            resetAutoTimer(); // 手動點擊後重新計算 8 秒
-        });
-
-     
-       // 終極版翻譯系統：具備更強的錯誤攔截與免封鎖代理
-        async function translateToEnglish(text) {
-            const q = encodeURIComponent(text);
-            const googleUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-HK&tl=en&dt=t&q=${q}`;
-
-            try {
-                // 【方案 A：直接連線 Google】
-                const res = await fetch(googleUrl);
-                if (!res.ok) throw new Error(`Google HTTP ${res.status}`);
-                
-                const data = await res.json();
-                let translatedText = '';
-                if (data && data[0]) {
-                    data[0].forEach(item => translatedText += item[0]);
-                }
-                return translatedText || text;
-
-            } catch (err1) {
-                console.warn(`⚠️ 方案A失敗 (${err1.message})，啟動 CORS Proxy...`);
-
-                try {
-                    // 【方案 B：使用 corsproxy 代理伺服器繞過 IP 封鎖】
-                    // 透過代理伺服器的 IP 去問 Google，藉此洗掉你被限制的額度
-                    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(googleUrl)}`;
-                    const resProxy = await fetch(proxyUrl);
-                    
-                    if (!resProxy.ok) throw new Error(`Proxy HTTP ${resProxy.status}`);
-                    
-                    const dataProxy = await resProxy.json();
-                    let translatedText = '';
-                    if (dataProxy && dataProxy[0]) {
-                        dataProxy[0].forEach(item => translatedText += item[0]);
-                    }
-                    return translatedText || text;
-
-                } catch (err2) {
-                    console.warn(`⚠️ 方案B失敗 (${err2.message})，切換至 Lingva 備援引擎...`);
-
-                    try {
-                        // 【方案 C：使用開源的 Lingva 翻譯 API】
-                        const lingvaUrl = `https://lingva.ml/api/v1/zh/en/${q}`;
-                        const resLingva = await fetch(lingvaUrl);
-                        
-                        if (!resLingva.ok) throw new Error(`Lingva HTTP ${resLingva.status}`);
-                        
-                        const dataLingva = await resLingva.json();
-                        return dataLingva.translation || text;
-
-                    } catch (err3) {
-                        console.error("❌ 所有翻譯引擎皆已耗盡或網路異常:", err3);
-                        return `${text} (⚠️ 暫時無法翻譯)`;
-                    }
-                }
-            }
-        }
-
-        // 處理文字：翻譯 -> 寫入本地畫面 -> 發送至 MQTT 雲端
-        async function processAndAppendText(originalText) {
-            const timeStamp = new Date().toLocaleTimeString();
-            // 產生唯一 ID 以便後續「撤回」功能辨識
-            const msgId = 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
-            
-            latestInterimText = "";
-            document.getElementById('liveInterim').textContent = '(等待發言...)';
-            document.getElementById('liveTranslation').textContent = `[翻譯中]: ${originalText}...`;
-            
-            // 每次成功捕獲完整句子後，重新計算 8 秒
-            resetAutoTimer();
-
-            const translatedText = await translateToEnglish(originalText);
-            document.getElementById('liveTranslation').textContent = `${originalText} ➔ ${translatedText}`;
-
-            const logEntry = { id: msgId, time: timeStamp, original: originalText, english: translatedText, isDeleted: false };
-            fullTranscript.push(logEntry);
-
-            // 1. 本地顯示歷史紀錄 (產生 HTML)
-            const logContentEl = document.getElementById('logContent');
-            const itemDiv = document.createElement('div');
-            itemDiv.className = 'log-item';
-            itemDiv.id = `log-item-${msgId}`;
-            itemDiv.innerHTML = `
-                <button class="btn-del" id="del-btn-${msgId}" onclick="toggleDelete('${msgId}')">❌ 撤回</button>
-                <span class="time">[${timeStamp}]</span> <strong>原文:</strong> ${originalText}<br>
-                <span class="time" style="visibility:hidden">[${timeStamp}]</span> <strong style="color:#2980b9;">英文:</strong> ${translatedText}
-            `;
-            logContentEl.appendChild(itemDiv);
-            // 自動向下捲動至最新對話
-            requestAnimationFrame(() => itemDiv.scrollIntoView({ behavior: 'smooth', block: 'end' }));
-
-            // 2. 發送給觀眾端 (透過 MQTT)
-            if (mqttClient && mqttClient.connected) {
-                mqttClient.publish(currentTopic, JSON.stringify({
-                    type: 'chat',
-                    id: msgId,
-                    time: timeStamp,
-                    original: originalText,
-                    english: translatedText
-                }));
-            }
-        }
-
-        // 撤回 / 恢復邏輯 (講者端控制觀眾端畫面)
-        function toggleDelete(msgId) {
-            const item = fullTranscript.find(x => x.id === msgId);
-            const el = document.getElementById(`log-item-${msgId}`);
-            const btn = document.getElementById(`del-btn-${msgId}`);
-            if (!item || !el) return;
-
-            item.isDeleted = !item.isDeleted;
-
-            if (item.isDeleted) {
-                // 標記為刪除：加上刪除線，並發送 delete 指令給觀眾端
-                el.classList.add('deleted-item');
-                btn.textContent = '↩️ 恢復';
-                btn.classList.add('restore');
-                if (mqttClient && mqttClient.connected) {
-                    mqttClient.publish(currentTopic, JSON.stringify({ type: 'control', action: 'delete', id: msgId }));
-                }
-            } else {
-                // 恢復顯示：移除刪除線，並發送 restore 指令給觀眾端
-                el.classList.remove('deleted-item');
-                btn.textContent = '❌ 撤回';
-                btn.classList.remove('restore');
-                if (mqttClient && mqttClient.connected) {
-                    mqttClient.publish(currentTopic, JSON.stringify({ type: 'control', action: 'restore', id: msgId }));
-                }
-            }
-        }
-        window.toggleDelete = toggleDelete;
-
-        // 【開始錄音】按鈕事件
-        document.getElementById('startBtn').addEventListener('click', () => {
-            if (!recognition) return;
-            isRecording = true;
-            fullTranscript = [];
-            document.getElementById('logContent').innerHTML = '';
-            document.getElementById('liveInterim').textContent = '(等待發言...)';
-            document.getElementById('liveTranslation').textContent = '(尚無翻譯)';
-            try { recognition.start(); } catch(e){}
-            
-            resetAutoTimer(); // 啟動 8 秒自動重置計時器
-
-            document.getElementById('startBtn').disabled = true;
-            document.getElementById('stopBtn').disabled = false;
-            document.getElementById('saveBtn').disabled = true;
-        });
-
-        // 【停止錄音】按鈕事件
-        document.getElementById('stopBtn').addEventListener('click', () => {
-            isRecording = false;
-            
-            if (autoResetInterval) {
-                clearInterval(autoResetInterval); // 停止錄音時關閉計時器
-                autoResetInterval = null;
-            }
-
-            try { recognition.stop(); } catch(e){}
-            document.getElementById('startBtn').disabled = false;
-            document.getElementById('stopBtn').disabled = true;
-            if (fullTranscript.length > 0) document.getElementById('saveBtn').disabled = false;
-        });
-
-        // 【下載紀錄】按鈕事件 (匯出 TXT 檔案)
-        document.getElementById('saveBtn').addEventListener('click', () => {
-            let fileContent = "=== 語音即時翻譯紀錄 ===\n\n";
-            // 只匯出「未被撤回」的內容
             fullTranscript.filter(item => !item.isDeleted).forEach(item => {
                 fileContent += `[${item.time}]\n原文: ${item.original}\n英文: ${item.english}\n\n`;
             });
