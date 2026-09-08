@@ -148,7 +148,6 @@
         let currentTopic = "";
         let isRoomReady = false;
         let latestInterimText = ""; // 紀錄最新的語音暫存
-        let autoResetInterval = null; // 儲存 8 秒計時器
 
         // MQTT 雲端頻道建立
         document.getElementById('createRoomBtn').addEventListener('click', () => {
@@ -304,15 +303,36 @@
             }, 7000); // 7 秒觸發接力預熱
         }
 
-        // 啟動/重置 8 秒定時器
-        function resetAutoTimer() {
-            if (autoResetInterval) clearInterval(autoResetInterval);
-            if (isRecording) {
-                autoResetInterval = setInterval(() => {
-                    document.getElementById('resetListenBtn').click();
-                }, 8000);
+        // 手動「⚡ 強制翻譯並發送」按鈕 (點擊後必然清空收聽欄)
+        document.getElementById('forceTranslateBtn').addEventListener('click', () => {
+            resetAutoTimer();
+            const textToSend = latestInterimText;
+            
+            // 立即清空收聽欄暫存
+            latestInterimText = "";
+            document.getElementById('liveInterim').textContent = '(等待發言...)';
+
+            if (textToSend && textToSend.trim() !== "") {
+                processAndAppendText(textToSend);
             }
-        }
+        });
+
+        // 新增「🔄 重置」按鈕 (點擊後清空暫存並重啟收音引擎)
+        document.getElementById('resetListenBtn').addEventListener('click', () => {
+            resetAutoTimer();
+            latestInterimText = "";
+            document.getElementById('liveInterim').textContent = '(已重置，等待發言...)';
+            
+            const currentEngine = (activeEngine === 'A') ? recA : recB;
+            if (isRecording && currentEngine) {
+                try { currentEngine.stop(); } catch(e){}
+                setTimeout(() => {
+                    if (isRecording) {
+                        try { currentEngine.start(); } catch(e){}
+                    }
+                }, 200);
+            }
+        });
 
         async function translateToEnglish(text) {
             try {
@@ -402,13 +422,14 @@
         window.toggleDelete = toggleDelete;
 
         document.getElementById('startBtn').addEventListener('click', () => {
-            if (!recognition) return;
+            if (!recA || !recB) return;
             isRecording = true;
+            activeEngine = 'A';
             fullTranscript = [];
             document.getElementById('logContent').innerHTML = '';
             document.getElementById('liveInterim').textContent = '(等待發言...)';
             document.getElementById('liveTranslation').textContent = '(尚無翻譯)';
-            try { recognition.start(); } catch(e){}
+            try { recA.start(); } catch(e){}
             resetAutoTimer();
             document.getElementById('startBtn').disabled = true;
             document.getElementById('stopBtn').disabled = false;
@@ -421,7 +442,11 @@
                 clearInterval(autoResetInterval);
                 autoResetInterval = null;
             }
-            try { recognition.stop(); } catch(e){}
+            try { recA.stop(); } catch(e){}
+            try { recB.stop(); } catch(e){}
+            document.getElementById('status').textContent = '已停止錄音';
+            document.getElementById('status').classList.remove('recording');
+            document.getElementById('liveInterim').textContent = '(已停止錄音)';
             document.getElementById('startBtn').disabled = false;
             document.getElementById('stopBtn').disabled = true;
             if (fullTranscript.length > 0) document.getElementById('saveBtn').disabled = false;
