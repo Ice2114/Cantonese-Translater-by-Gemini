@@ -3,234 +3,416 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>粵英混合語音即時翻譯器 (Google翻譯引擎版)</title>
+    <title>粵英語音即時翻譯機 (講者發射端)</title>
+    <!-- 引入 MQTT 雲端中繼庫 (穿透防火牆) -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; max-width: 800px; margin: 30px auto; padding: 20px; background-color: #f4f7f6; color: #333; }
-        h1 { text-align: center; color: #2c3e50; }
-        .controls { display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; }
-        button { padding: 12px 24px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; transition: background 0.3s; }
-        #startBtn { background-color: #2ecc71; color: white; } #startBtn:hover { background-color: #27ae60; }
-        #stopBtn { background-color: #e74c3c; color: white; } #stopBtn:hover { background-color: #c0392b; }
-        #saveBtn { background-color: #3498db; color: white; } #saveBtn:hover { background-color: #2980b9; }
-        button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+        /* 基礎樣式設定 */
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 850px; margin: 20px auto; padding: 20px; background-color: #f4f7f6; color: #333; }
+        h1 { text-align: center; color: #2c3e50; margin-bottom: 25px; }
+        .card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.08); }
+        .room-box { border-left: 5px solid #3498db; }
+        
+        /* 表單與按鈕樣式 */
+        .row { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+        input[type="text"] { padding: 8px 12px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; flex-grow: 1; max-width: 280px; }
+        .btn { padding: 8px 16px; font-size: 14px; background-color: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .btn:hover { background-color: #2980b9; }
+        
+        /* 觀眾連結區塊 */
+        .viewer-link-box { margin-top: 12px; padding: 10px; background: #eef6fc; border: 1px solid #3498db; border-radius: 4px; display: none; }
+        .viewer-link-box a { color: #2980b9; font-weight: bold; word-break: break-all; }
+
+        /* 錄音控制按鈕 */
+        .controls { display: flex; justify-content: center; gap: 15px; margin: 20px 0; }
+        button.action-btn { padding: 12px 24px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; transition: background 0.3s; }
+        #startBtn { background-color: #2ecc71; color: white; }
+        #startBtn:hover { background-color: #27ae60; }
+        #stopBtn { background-color: #e74c3c; color: white; }
+        #stopBtn:hover { background-color: #c0392b; }
+        #saveBtn { background-color: #3498db; color: white; }
+        #saveBtn:hover { background-color: #2980b9; }
+        button:disabled { background-color: #bdc3c7 !important; cursor: not-allowed; opacity: 0.7; }
+
+        /* 狀態文字與動畫 */
         .status { text-align: center; font-weight: bold; margin-bottom: 15px; height: 20px; }
-        .recording { color: #e74c3c; animation: blink 2s infinite; }
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
-        .box-container { display: flex; flex-direction: column; gap: 15px; }
-        .box { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); min-height: 120px; max-height: 250px; overflow-y: auto; }
-        .box h3 { margin-top: 0; color: #34495e; border-bottom: 2px solid #ecf0f1; padding-bottom: 5px; }
-        .log-item { margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px dashed #eee; }
-        .time { font-size: 0.8em; color: #7f8c8d; margin-right: 8px; }
+        .recording { color: #e74c3c; }
+
+        /* 即時狀態卡片 */
+        .live-card { background: #ffffff; border: 2px dashed #3498db; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .live-title { font-weight: bold; color: #2980b9; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+        .live-dot { height: 10px; width: 10px; background-color: #e74c3c; border-radius: 50%; display: inline-block; animation: blink 1s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+        .live-sub-box { background: #f8f9fa; padding: 8px 12px; border-radius: 6px; font-size: 15px; word-break: break-all; }
+
+        /* 歷史紀錄區塊 */
+        .history-box { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); height: 320px; overflow-y: auto; }
+        .log-item { margin-bottom: 10px; padding: 8px; border-bottom: 1px dashed #eee; font-size: 15px; border-radius: 4px; transition: all 0.2s; position: relative; }
+        .time { font-size: 0.8em; color: #7f8c8d; }
+        
+        /* 撤回樣式 */
+        .deleted-item { text-decoration: line-through; opacity: 0.45; background-color: #f2f2f2; }
+        .btn-del { padding: 4px 8px; font-size: 12px; background-color: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; float: right; }
+        .btn-del.restore { background-color: #27ae60; }
     </style>
 </head>
 <body>
 
-    <h1>粵英混合語音即時翻譯紀錄器 <br><small style="font-size: 0.6em; color: #7f8c8d;">(Google Translate 粵語專屬引擎版)</small></h1>
-    
-    <div class="controls">
-        <button id="startBtn">開始錄音翻譯</button>
-        <button id="stopBtn" disabled>停止並生成紀錄</button>
-        <button id="saveBtn" disabled>下載文字紀錄 (.txt)</button>
+    <h1>🎙️ 粵英語音即時翻譯機 (發射端)</h1>
+
+    <!-- 步驟一：房間設定 -->
+    <div class="card room-box">
+        <strong>📡 步驟 1：設定直播房間號碼</strong>
+        <div class="row">
+            <input type="text" id="roomIdInput" placeholder="請輸入房間號碼 (例如: room101)">
+            <button class="btn" id="createRoomBtn">建立/開啟房間</button>
+        </div>
+        <div id="roomStatus" style="margin-top:8px; font-weight:bold; color:#7f8c8d;">狀態：尚未建立房間</div>
+        
+        <div id="viewerLinkBox" class="viewer-link-box">
+            🔗 觀眾分享網址：<a id="viewerLink" href="#" target="_blank"></a>
+        </div>
     </div>
 
-    <div id="status" class="status">準備就緒</div>
+    <!-- 控制按鈕 -->
+    <div class="controls">
+        <button id="startBtn" class="action-btn" disabled>開始錄音翻譯</button>
+        <button id="stopBtn" class="action-btn" disabled>停止並生成紀錄</button>
+        <button id="saveBtn" class="action-btn" disabled>下載紀錄 (.txt)</button>
+    </div>
 
-    <div class="box-container">
-        <div class="box">
-            <h3>即時辨識與翻譯 (Live Translation)</h3>
-            <div id="liveText" style="color: #7f8c8d; font-style: italic;">等待語音輸入...</div>
-        </div>
+    <div id="status" class="status">等待連線完成...</div>
 
-        <div class="box">
-            <h3>完整逐字紀錄 (Full Transcript Log)</h3>
-            <div id="logContent"></div>
+    <!-- 即時狀態卡片 (含強制翻譯與重置按鈕) -->
+    <div class="live-card">
+        <div class="live-title"><span class="live-dot"></span> 語音辨識與翻譯狀態 (每8秒自動重置)：</div>
+        <div class="live-sub-box">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                <div><strong>🗣️ 正在收聽：</strong><span id="liveInterim" style="color: #d35400;">(等待發言...)</span></div>
+                <div style="display: flex; gap: 6px;">
+                    <button class="btn" id="forceTranslateBtn" style="padding: 4px 10px; font-size: 12px; background-color: #e67e22;">⚡ 強制翻譯並發送</button>
+                    <button class="btn" id="resetListenBtn" style="padding: 4px 10px; font-size: 12px; background-color: #7f8c8d;">🔄 手動重置</button>
+                </div>
+            </div>
         </div>
+        <div class="live-sub-box" style="margin-top: 8px;">
+            <strong>🔤 最新翻譯：</strong><span id="liveTranslation" style="color: #27ae60;">(尚無翻譯)</span>
+        </div>
+    </div>
+
+    <!-- 歷史紀錄 -->
+    <div class="history-box">
+        <h3 style="margin-top:0; color:#34495e;">📜 逐字翻譯紀錄</h3>
+        <div id="logContent"></div>
     </div>
 
     <script>
-        const startBtn = document.getElementById('startBtn');
-        const stopBtn = document.getElementById('stopBtn');
-        const saveBtn = document.getElementById('saveBtn');
-        const statusEl = document.getElementById('status');
-        const liveTextEl = document.getElementById('liveText');
-        const logContentEl = document.getElementById('logContent');
+        // 隨機生成預設房間號碼
+        const defaultRoom = "room" + Math.floor(1000 + Math.random() * 9000);
+        document.getElementById('roomIdInput').value = defaultRoom;
 
+        // 全域變數
+        let mqttClient = null;
+        let currentTopic = "";
+        let isRoomReady = false;
+        let latestInterimText = ""; // 紀錄最新的語音暫存
+        let autoResetInterval = null; // 8秒自動重置的計時器
+
+        // 檢查是否可以啟用「開始錄音」按鈕
+        function checkReadyState() {
+            const startBtn = document.getElementById('startBtn');
+            if (isRoomReady) {
+                startBtn.disabled = false;
+                document.getElementById('status').textContent = '準備就緒';
+            } else {
+                startBtn.disabled = true;
+            }
+        }
+
+        // MQTT 雲端頻道建立 (建立房間)
+        document.getElementById('createRoomBtn').addEventListener('click', () => {
+            const roomVal = document.getElementById('roomIdInput').value.trim() || defaultRoom;
+            currentTopic = `company/trans/room/${roomVal}`; // 設定訂閱的主題路徑
+            const roomStatusEl = document.getElementById('roomStatus');
+
+            if (mqttClient) mqttClient.end(); // 若已連線則先斷開舊連線
+
+            roomStatusEl.textContent = "📡 正在連線至雲端 WebSocket 頻道...";
+            roomStatusEl.style.color = "#e67e22";
+
+            // 連線至免費的公共 MQTT Broker (EMQX)
+            mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+
+            mqttClient.on('connect', () => {
+                isRoomReady = true;
+                roomStatusEl.textContent = `🟢 房間【${roomVal}】雲端頻道已建立`;
+                roomStatusEl.style.color = "#2ecc71";
+
+                // 自動生成觀眾端網址
+                const baseURL = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+                const viewerUrl = `${baseURL}viewer.html?room=${encodeURIComponent(roomVal)}`;
+                
+                const viewerLinkEl = document.getElementById('viewerLink');
+                viewerLinkEl.href = viewerUrl;
+                viewerLinkEl.textContent = viewerUrl;
+                document.getElementById('viewerLinkBox').style.display = 'block';
+
+                checkReadyState();
+            });
+
+            mqttClient.on('error', (err) => {
+                isRoomReady = false;
+                roomStatusEl.textContent = `🔴 雲端連線失敗，請檢查網路狀態！`;
+                roomStatusEl.style.color = "#e74c3c";
+                checkReadyState();
+            });
+        });
+
+        // Web Speech API (語音辨識核心)
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         let recognition;
         let isRecording = false;
         let fullTranscript = [];
-        let restartTimer = null;
-        let forceSegmentTimer = null;
 
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            // 這裡必須用 zh-HK，因為這是給瀏覽器麥克風「聽懂」廣東話的參數
+            recognition.lang = 'zh-HK';
+            recognition.continuous = true; // 持續監聽
+            recognition.interimResults = true; // 允許回傳未完成的語音片段 (即時反饋)
 
-        if (!SpeechRecognition) {
-            alert('您的瀏覽器不支援 Web Speech API，請改用 Google Chrome 瀏覽器開啟。');
-        } else {
-            function initRecognition() {
-                if (recognition) {
-                    recognition.onend = null; 
-                    try { recognition.abort(); } catch(e){}
+            recognition.onstart = () => {
+                document.getElementById('status').textContent = '● 正在持續收音與聆聽中...';
+                document.getElementById('status').classList.add('recording');
+            };
+
+            recognition.onerror = (event) => {
+                console.warn('語音辨識狀態:', event.error);
+            };
+
+            // 當語音引擎意外中斷時，自動重啟以保持連續錄音
+            recognition.onend = () => {
+                if (isRecording) {
+                    setTimeout(() => {
+                        if (isRecording) try { recognition.start(); } catch(e) {}
+                    }, 300);
+                } else {
+                    document.getElementById('status').textContent = '已停止錄音';
+                    document.getElementById('status').classList.remove('recording');
+                    document.getElementById('liveInterim').textContent = '(已停止錄音)';
                 }
+            };
 
-                recognition = new SpeechRecognition();
-                recognition.lang = 'zh-HK'; 
-                recognition.continuous = true;
-                recognition.interimResults = true;
-
-                recognition.onstart = () => {
-                    statusEl.textContent = '● 正在聆聽與翻譯中...';
-                    statusEl.classList.add('recording');
-                    resetRestartTimer(); 
-                };
-
-                recognition.onerror = (event) => {
-                    if (event.error === 'not-allowed') {
-                        alert('請允許存取麥克風權限。');
-                        stopRecording();
+            // 當接收到語音結果時
+            recognition.onresult = (event) => {
+                let interim = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    const text = event.results[i][0].transcript.trim();
+                    if (event.results[i].isFinal) {
+                        // 如果這段話已經講完 (產生句點)，觸發翻譯流程
+                        if (text.length >= 1) processAndAppendText(text);
+                    } else {
+                        // 否則放入暫存區 (即時顯示正在聽的字)
+                        interim += text;
                     }
-                };
+                }
+                if (interim) {
+                    latestInterimText = interim;
+                    document.getElementById('liveInterim').textContent = interim;
+                }
+            };
+        } else {
+            alert('瀏覽器不支援 Web Speech API，請改用 Chrome 或 Edge。');
+        }
 
-                recognition.onend = () => {
+        // 重置收音引擎的核心函式 (供手動與自動呼叫)
+        function resetRecognition() {
+            latestInterimText = "";
+            document.getElementById('liveInterim').textContent = '(已重置，等待發言...)';
+            
+            if (isRecording && recognition) {
+                try { recognition.stop(); } catch(e){}
+                setTimeout(() => {
                     if (isRecording) {
-                        statusEl.textContent = '● 系統重連中...';
-                        setTimeout(() => {
-                            if (isRecording) {
-                                try { recognition.start(); } 
-                                catch (e) { initRecognition(); recognition.start(); }
-                            }
-                        }, 250); 
-                    } else {
-                        statusEl.textContent = '已停止錄音';
-                        statusEl.classList.remove('recording');
+                        try { recognition.start(); } catch(e){}
                     }
-                };
-
-                recognition.onresult = async (event) => {
-                    resetRestartTimer();
-
-                    let interimTranscript = '';
-                    for (let i = event.resultIndex; i < event.results.length; ++i) {
-                        const transcriptText = event.results[i][0].transcript;
-                        if (event.results[i].isFinal) {
-                            clearTimeout(forceSegmentTimer);
-                            forceSegmentTimer = null;
-                            await processAndAppendText(transcriptText);
-                        } else {
-                            interimTranscript += transcriptText;
-                        }
-                    }
-                    
-                    if (interimTranscript) {
-                        liveTextEl.textContent = `[聆聽中]: ${interimTranscript}`;
-                        
-                        if (!forceSegmentTimer) {
-                            forceSegmentTimer = setTimeout(() => {
-                                if (recognition) { try { recognition.stop(); } catch(e) {} }
-                                forceSegmentTimer = null;
-                            }, 8000); 
-                        }
-                    } else {
-                        clearTimeout(forceSegmentTimer);
-                        forceSegmentTimer = null;
-                    }
-                };
+                }, 200);
             }
-            initRecognition(); 
         }
 
-        function resetRestartTimer() {
-            clearTimeout(restartTimer);
+        // 設定/重置 8 秒自動重置計時器
+        // 作用：防止講者說話停頓太久，導致語音卡在「未完成(interim)」狀態發不出去
+        function resetAutoTimer() {
+            if (autoResetInterval) clearInterval(autoResetInterval);
             if (isRecording) {
-                restartTimer = setTimeout(() => {
-                    if (recognition) { try { recognition.stop(); } catch(e) {} }
-                }, 15000); 
+                autoResetInterval = setInterval(() => {
+                    console.log("8秒自動重置觸發");
+                    resetRecognition();
+                }, 8000);
             }
         }
 
-        // ==========================================
-        // 核心更新：使用 Google Translate API (粵語專屬模型)
-        // ==========================================
+        // 手動「⚡ 強制翻譯並發送」按鈕
+        document.getElementById('forceTranslateBtn').addEventListener('click', () => {
+            const textToSend = latestInterimText;
+            
+            // 立即清空收聽欄暫存並重置 8 秒計時
+            latestInterimText = "";
+            document.getElementById('liveInterim').textContent = '(等待發言...)';
+            resetAutoTimer();
+
+            // 若暫存區有文字，立刻發送去翻譯
+            if (textToSend && textToSend.trim() !== "") {
+                processAndAppendText(textToSend);
+            }
+        });
+
+        // 手動「🔄 重置」按鈕
+        document.getElementById('resetListenBtn').addEventListener('click', () => {
+            resetRecognition();
+            resetAutoTimer(); // 手動點擊後重新計算 8 秒
+        });
+
+        // 使用 Google Translate API (免費端點) 進行翻譯
         async function translateToEnglish(text) {
             try {
-                // sl=yue 代表來源語言為廣東話 (Cantonese)，tl=en 代表目標語言為英文
+                // sl=yue (來源：廣東話/粵語) - 讓 Google 翻譯能正確理解口語字詞 (如：佢、喺度)
+                // tl=en (目標：英文)
                 const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=yue&tl=en&dt=t&q=${encodeURIComponent(text)}`;
                 const response = await fetch(url);
                 const data = await response.json();
                 
-                // Google 返回的資料是巢狀陣列，將所有分段的翻譯結果組合起來
                 let translatedText = '';
+                // 解析 Google 回傳的陣列結構拼湊完整句子
                 if (data && data[0]) {
-                    for (let i = 0; i < data[0].length; i++) {
+                    for(let i=0; i<data[0].length; i++){
                         translatedText += data[0][i][0];
                     }
                 }
                 return translatedText || text;
             } catch (err) {
-                console.error('翻譯出錯:', err);
-                return text; 
+                console.error("翻譯錯誤:", err);
+                return `${text} (⚠️ 翻譯失敗)`; 
             }
         }
 
+        // 處理文字：翻譯 -> 寫入本地畫面 -> 發送至 MQTT 雲端
         async function processAndAppendText(originalText) {
             const timeStamp = new Date().toLocaleTimeString();
-            liveTextEl.textContent = '翻譯中...';
+            // 產生唯一 ID 以便後續「撤回」功能辨識
+            const msgId = 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
             
-            const translatedText = await translateToEnglish(originalText);
+            latestInterimText = "";
+            document.getElementById('liveInterim').textContent = '(等待發言...)';
+            document.getElementById('liveTranslation').textContent = `[翻譯中]: ${originalText}...`;
             
-            liveTextEl.textContent = `[最新翻譯]: ${translatedText}`;
+            // 每次成功捕獲完整句子後，重新計算 8 秒
+            resetAutoTimer();
 
-            const logEntry = { time: timeStamp, original: originalText, english: translatedText };
+            const translatedText = await translateToEnglish(originalText);
+            document.getElementById('liveTranslation').textContent = `${originalText} ➔ ${translatedText}`;
+
+            const logEntry = { id: msgId, time: timeStamp, original: originalText, english: translatedText, isDeleted: false };
             fullTranscript.push(logEntry);
 
+            // 1. 本地顯示歷史紀錄 (產生 HTML)
+            const logContentEl = document.getElementById('logContent');
             const itemDiv = document.createElement('div');
             itemDiv.className = 'log-item';
-            itemDiv.innerHTML = `<span class="time">[${timeStamp}]</span> <strong>原文:</strong> ${originalText}<br><span class="time" style="visibility:hidden">[${timeStamp}]</span> <strong>英文:</strong> ${translatedText}`;
+            itemDiv.id = `log-item-${msgId}`;
+            itemDiv.innerHTML = `
+                <button class="btn-del" id="del-btn-${msgId}" onclick="toggleDelete('${msgId}')">❌ 撤回</button>
+                <span class="time">[${timeStamp}]</span> <strong>原文:</strong> ${originalText}<br>
+                <span class="time" style="visibility:hidden">[${timeStamp}]</span> <strong style="color:#2980b9;">英文:</strong> ${translatedText}
+            `;
             logContentEl.appendChild(itemDiv);
-            
-            logContentEl.scrollTop = logContentEl.scrollHeight;
+            // 自動向下捲動至最新對話
+            requestAnimationFrame(() => itemDiv.scrollIntoView({ behavior: 'smooth', block: 'end' }));
+
+            // 2. 發送給觀眾端 (透過 MQTT)
+            if (mqttClient && mqttClient.connected) {
+                mqttClient.publish(currentTopic, JSON.stringify({
+                    type: 'chat',
+                    id: msgId,
+                    time: timeStamp,
+                    original: originalText,
+                    english: translatedText
+                }));
+            }
         }
 
-        function stopRecording() {
-            isRecording = false;
-            clearTimeout(restartTimer);
-            clearTimeout(forceSegmentTimer);
-            if (recognition) recognition.stop();
-            
-            startBtn.disabled = false;
-            stopBtn.disabled = true;
-            if (fullTranscript.length > 0) saveBtn.disabled = false;
-        }
+        // 撤回 / 恢復邏輯 (講者端控制觀眾端畫面)
+        function toggleDelete(msgId) {
+            const item = fullTranscript.find(x => x.id === msgId);
+            const el = document.getElementById(`log-item-${msgId}`);
+            const btn = document.getElementById(`del-btn-${msgId}`);
+            if (!item || !el) return;
 
-        startBtn.addEventListener('click', () => {
+            item.isDeleted = !item.isDeleted;
+
+            if (item.isDeleted) {
+                // 標記為刪除：加上刪除線，並發送 delete 指令給觀眾端
+                el.classList.add('deleted-item');
+                btn.textContent = '↩️ 恢復';
+                btn.classList.add('restore');
+                if (mqttClient && mqttClient.connected) {
+                    mqttClient.publish(currentTopic, JSON.stringify({ type: 'control', action: 'delete', id: msgId }));
+                }
+            } else {
+                // 恢復顯示：移除刪除線，並發送 restore 指令給觀眾端
+                el.classList.remove('deleted-item');
+                btn.textContent = '❌ 撤回';
+                btn.classList.remove('restore');
+                if (mqttClient && mqttClient.connected) {
+                    mqttClient.publish(currentTopic, JSON.stringify({ type: 'control', action: 'restore', id: msgId }));
+                }
+            }
+        }
+        window.toggleDelete = toggleDelete;
+
+        // 【開始錄音】按鈕事件
+        document.getElementById('startBtn').addEventListener('click', () => {
             if (!recognition) return;
             isRecording = true;
             fullTranscript = [];
-            logContentEl.innerHTML = '';
-            liveTextEl.textContent = '聆聽中...';
+            document.getElementById('logContent').innerHTML = '';
+            document.getElementById('liveInterim').textContent = '(等待發言...)';
+            document.getElementById('liveTranslation').textContent = '(尚無翻譯)';
+            try { recognition.start(); } catch(e){}
             
-            clearTimeout(forceSegmentTimer);
-            forceSegmentTimer = null;
+            resetAutoTimer(); // 啟動 8 秒自動重置計時器
 
-            try { recognition.start(); } 
-            catch (e) { initRecognition(); recognition.start(); }
-            
-            startBtn.disabled = true;
-            stopBtn.disabled = false;
-            saveBtn.disabled = true;
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('saveBtn').disabled = true;
         });
 
-        stopBtn.addEventListener('click', stopRecording);
+        // 【停止錄音】按鈕事件
+        document.getElementById('stopBtn').addEventListener('click', () => {
+            isRecording = false;
+            
+            if (autoResetInterval) {
+                clearInterval(autoResetInterval); // 停止錄音時關閉計時器
+                autoResetInterval = null;
+            }
 
-        saveBtn.addEventListener('click', () => {
-            if (fullTranscript.length === 0) return;
-            let fileContent = "=== 粵英混合語音即時翻譯紀錄 ===\n\n";
-            fullTranscript.forEach(item => {
+            try { recognition.stop(); } catch(e){}
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            if (fullTranscript.length > 0) document.getElementById('saveBtn').disabled = false;
+        });
+
+        // 【下載紀錄】按鈕事件 (匯出 TXT 檔案)
+        document.getElementById('saveBtn').addEventListener('click', () => {
+            let fileContent = "=== 語音即時翻譯紀錄 ===\n\n";
+            // 只匯出「未被撤回」的內容
+            fullTranscript.filter(item => !item.isDeleted).forEach(item => {
                 fileContent += `[${item.time}]\n原文: ${item.original}\n英文: ${item.english}\n\n`;
             });
             const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = `語音翻譯紀錄_${new Date().toISOString().slice(0,10)}.txt`;
+            a.download = `翻譯紀錄_${new Date().toISOString().slice(0,10)}.txt`;
             a.click();
         });
     </script>
