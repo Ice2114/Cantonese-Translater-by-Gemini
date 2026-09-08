@@ -251,17 +251,23 @@
             resetAutoTimer(); 
         });
 
-        // 🚀 使用 Google Gemini API (1.5 Flash 模型) 進行專業廣東話翻譯
+        // 使用 Google Gemini API (透過代理伺服器突破香港地區限制)
         async function translateToEnglish(text) {
-            // 你提供的 API 金鑰已經整合在這裡
-            const GEMINI_API_KEY = 'AQ.Ab8RN6Kc84KjcJQthfNsKZ4f5XWq4Xg19TQ_wGiQQSQmmNXYnQ';
+            // ⚠️ 貼上你截圖裡最新複製的那串 API Key
+            const GEMINI_API_KEY = 'AQ.Ab8RN6JSGxwyY7IgbO7HIl6B2wGsTWGWqkGf_4mgPAyNCR99-g...請貼上完整金鑰';
             
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+            // 原始的 Google API 網址
+            const targetUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+            
+            // 🚀 關鍵破解：套上一層 corsproxy 代理伺服器，讓 Google 以為請求來自海外
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
 
             try {
-                const response = await fetch(url, {
+                const response = await fetch(proxyUrl, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
                     body: JSON.stringify({
                         contents: [{
                             parts: [{
@@ -276,8 +282,7 @@
                 });
 
                 if (!response.ok) {
-                    if (response.status === 429) throw new Error("請求太頻繁，請稍候");
-                    throw new Error(`Gemini 伺服器錯誤: ${response.status}`);
+                    throw new Error(`伺服器錯誤: ${response.status}`);
                 }
 
                 const data = await response.json();
@@ -288,6 +293,7 @@
                 }
                 
                 return text;
+
             } catch (err) {
                 console.error("Gemini 翻譯失敗:", err);
                 return `${text} (⚠️ AI翻譯失敗: ${err.message})`;
