@@ -275,31 +275,56 @@
 
         // 使用 Google Translate API (免費端點) 進行翻譯
        // 使用 Google Translate API (免費端點) 進行翻譯
+       // 使用具備「代理繞過」與「第三方備援」的三層翻譯系統
         async function translateToEnglish(text) {
             try {
-                // 必須使用 sl=zh-HK，因為免費版 API(gtx) 目前會拒絕 yue 並引發 CORS 錯誤
-                const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-HK&tl=en&dt=t&q=${encodeURIComponent(text)}`;
+                // 1. 定義原始 Google 翻譯網址
+                const googleUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-HK&tl=en&dt=t&q=${encodeURIComponent(text)}`;
                 
-                const response = await fetch(url);
-                
-                // 如果 Google 沒有正常回傳，丟出錯誤
+                let response;
+                try {
+                    // 嘗試 1：直接連線 Google
+                    response = await fetch(googleUrl);
+                } catch (e) {
+                    // 如果發生 CORS 錯誤，fetch 會直接跳到 catch (TypeError: Failed to fetch)
+                    console.warn("⚠️ 觸發 CORS 限制，啟動代理伺服器繞過...");
+                    
+                    // 嘗試 2：使用 AllOrigins 代理伺服器繞過瀏覽器的 CORS 限制
+                    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(googleUrl)}`;
+                    response = await fetch(proxyUrl);
+                }
+
                 if (!response.ok) {
-                    throw new Error(`Google API 拒絕連線，狀態碼: ${response.status}`);
+                    throw new Error(`Google API 拒絕服務，狀態碼: ${response.status}`);
                 }
 
                 const data = await response.json();
-                
                 let translatedText = '';
-                // 解析 Google 回傳的陣列結構拼湊完整句子
+                
                 if (data && data[0]) {
                     for(let i=0; i<data[0].length; i++){
                         translatedText += data[0][i][0];
                     }
                 }
                 return translatedText || text;
+
             } catch (err) {
-                console.error("翻譯錯誤:", err);
-                return `${text} (⚠️ 翻譯失敗)`; 
+                console.warn("⚠️ Google 翻譯完全阻擋，切換至備用翻譯引擎 (MyMemory)...", err);
+                
+                // 嘗試 3：終極備援方案 (MyMemory 免費翻譯 API)
+                try {
+                    const backupUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=zh-HK|en`;
+                    const backupRes = await fetch(backupUrl);
+                    const backupData = await backupRes.json();
+                    
+                    if (backupData && backupData.responseData && backupData.responseData.translatedText) {
+                        return backupData.responseData.translatedText;
+                    }
+                } catch (backupErr) {
+                    console.error("❌ 所有翻譯引擎皆失效:", backupErr);
+                }
+
+                return `${text} (⚠️ 暫時無法翻譯)`; 
             }
         }
 
