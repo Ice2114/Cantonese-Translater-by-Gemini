@@ -274,12 +274,19 @@
         });
 
         // 使用 Google Translate API (免費端點) 進行翻譯
+       // 使用 Google Translate API (免費端點) 進行翻譯
         async function translateToEnglish(text) {
             try {
-                // sl=yue (來源：廣東話/粵語) - 讓 Google 翻譯能正確理解口語字詞 (如：佢、喺度)
-                // tl=en (目標：英文)
-                const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=yue&tl=en&dt=t&q=${encodeURIComponent(text)}`;
+                // 必須使用 sl=zh-HK，因為免費版 API(gtx) 目前會拒絕 yue 並引發 CORS 錯誤
+                const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-HK&tl=en&dt=t&q=${encodeURIComponent(text)}`;
+                
                 const response = await fetch(url);
+                
+                // 如果 Google 沒有正常回傳，丟出錯誤
+                if (!response.ok) {
+                    throw new Error(`Google API 拒絕連線，狀態碼: ${response.status}`);
+                }
+
                 const data = await response.json();
                 
                 let translatedText = '';
