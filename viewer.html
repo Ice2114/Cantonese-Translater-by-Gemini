@@ -128,10 +128,9 @@
             color: #2980b9;
         }
 
-        .deleted-item {
-            text-decoration: line-through;
-            opacity: 0.4;
-            background: #e0e0e0;
+        /* 隱藏訊息的 CSS 樣式 (取代刪除綫) */
+        .hidden-item {
+            display: none !important;
         }
 
         .status-tag {
@@ -170,7 +169,7 @@
         const urlParams = new URLSearchParams(window.location.search);
         let roomId = urlParams.get('room');
 
-        // 加回彈窗提示：若網址無 room 參數則主動跳窗詢問
+        // 若網址無 room 參數則主動跳窗詢問
         if (!roomId || !roomId.trim()) {
             roomId = prompt("Please enter the Speaker's Room ID:", "room101");
         }
@@ -204,6 +203,7 @@
             try {
                 const data = JSON.parse(message.toString());
 
+                // 1. 新增廣播內容
                 if (data.type === 'chat') {
                     document.getElementById('liveZh').textContent = data.original;
                     document.getElementById('liveEn').textContent = data.english;
@@ -214,21 +214,35 @@
                     itemDiv.id = `msg-${data.id}`;
                     itemDiv.innerHTML = `
                         <div class="time">${data.time}</div>
-                        <div class="text-zh">Original: ${data.original}</div>
-                        <div class="text-en">English: ${data.english}</div>
+                        <div class="text-zh">Original: <span id="text-orig-${data.id}">${data.original}</span></div>
+                        <div class="text-en">English: <span id="text-eng-${data.id}">${data.english}</span></div>
                     `;
                     historyBox.appendChild(itemDiv);
                     
                     historyBox.scrollTop = historyBox.scrollHeight;
                 }
 
+                // 2. 處理編輯訊息 (相容 data.type === 'edit' 及 data.action === 'edit')
+                if (data.type === 'edit' || (data.type === 'control' && data.action === 'edit')) {
+                    const targetOrig = document.getElementById(`text-orig-${data.id}`);
+                    const targetEng = document.getElementById(`text-eng-${data.id}`);
+                    
+                    if (targetOrig) targetOrig.textContent = data.original;
+                    if (targetEng) targetEng.textContent = data.english;
+
+                    // 同步更新最頂部的「最新翻譯區」
+                    document.getElementById('liveZh').textContent = data.original;
+                    document.getElementById('liveEn').textContent = data.english;
+                }
+
+                // 3. 處理撤回與恢復 (直接隱藏/顯示，原地保留位置)
                 if (data.type === 'control') {
                     const targetEl = document.getElementById(`msg-${data.id}`);
                     if (targetEl) {
                         if (data.action === 'delete') {
-                            targetEl.classList.add('deleted-item');
+                            targetEl.classList.add('hidden-item'); // 隱藏訊息
                         } else if (data.action === 'restore') {
-                            targetEl.classList.remove('deleted-item');
+                            targetEl.classList.remove('hidden-item'); // 原地還原顯示
                         }
                     }
                 }
