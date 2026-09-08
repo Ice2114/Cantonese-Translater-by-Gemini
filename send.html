@@ -236,45 +236,37 @@
             resetAutoTimer(); 
         });
 
-        // 🚀 使用 Google Gemini API (1.5 Flash 模型 - 直連版)
+      // 🚀 使用免 Key 的 MyMemory 廣東話 (yue) 專用翻譯 API
         async function translateToEnglish(text) {
-            // ⚠️ 請將引號內的文字替換為你唯一的 Gemini API 金鑰
-            const GEMINI_API_KEY = 'AQ.Ab8RN6JSGxwyY7IgbO7HlI6B2wGsTWGWqkGf_4mgPAyNCR99-g';
-            
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+            // yue 代表粵語/廣東話，en 代表英文
+            const sourceLang = 'yue';
+            const targetLang = 'en';
+            const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${sourceLang}|${targetLang}`;
 
             try {
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{
-                            parts: [{
-                                text: `請將以下這段廣東話口語翻譯成自然、流暢的英文。直接輸出英文翻譯結果就好，絕對不要包含任何解釋、引號或其他廢話：\n\n${text}`
-                            }]
-                        }],
-                        generationConfig: {
-                            temperature: 0.3, 
-                            maxOutputTokens: 200
-                        }
-                    })
-                });
-
+                const response = await fetch(url);
+                
                 if (!response.ok) {
-                    throw new Error(`伺服器錯誤: ${response.status}`);
+                    throw new Error(`HTTP 錯誤: ${response.status}`);
                 }
 
                 const data = await response.json();
                 
-                if (data.candidates && data.candidates.length > 0) {
-                    let translatedText = data.candidates[0].content.parts[0].text;
-                    return translatedText.trim();
+                // 解析 MyMemory 回傳結果
+                if (data && data.responseData && data.responseData.translatedText) {
+                    let translatedText = data.responseData.translatedText;
+
+                    // 防護：若 API 找不到對應翻譯，有時會回傳原本的字串，這裡做過濾
+                    if (translatedText.trim() !== '') {
+                        return translatedText;
+                    }
                 }
                 
                 return text;
+
             } catch (err) {
-                console.error("Gemini 翻譯失敗:", err);
-                return `${text} (⚠️ AI翻譯失敗: ${err.message})`;
+                console.error("MyMemory 翻譯失敗:", err);
+                return `${text} (⚠️ 翻譯失敗: ${err.message})`;
             }
         }
 
