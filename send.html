@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>粵英語音即時翻譯機 (講者發射端)</title>
-    <!-- 引入 MQTT 雲端中繼庫 (穿透防火牆) -->
+    <!-- 引入 MQTT 雲端中繼庫 -->
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 850px; margin: 20px auto; padding: 20px; background-color: #f4f7f6; color: #333; }
@@ -13,9 +13,10 @@
         .room-box { border-left: 5px solid #3498db; }
         .config-box { border-left: 5px solid #bdc3c7; transition: border-color 0.3s; }
         .config-box.active { border-left-color: #2ecc71; }
+        .manual-box { border-left: 5px solid #9b59b6; }
         
         .row { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
-        input[type="text"], input[type="email"] { padding: 8px 12px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; flex-grow: 1; max-width: 280px; }
+        input[type="text"], input[type="email"] { padding: 8px 12px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; flex-grow: 1; min-width: 200px; }
         .btn { padding: 8px 16px; font-size: 14px; background-color: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; }
         .btn:hover { background-color: #2980b9; }
         
@@ -50,10 +51,14 @@
         .log-item { margin-bottom: 10px; padding: 8px; border-bottom: 1px dashed #eee; font-size: 15px; border-radius: 4px; transition: all 0.2s; position: relative; }
         .time { font-size: 0.8em; color: #7f8c8d; }
         
-        /* 撤回樣式 */
-        .deleted-item { text-decoration: line-through; opacity: 0.45; background-color: #f2f2f2; }
-        .btn-del { padding: 4px 8px; font-size: 12px; background-color: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; float: right; }
+        /* 操作按鈕群 */
+        .btn-group { float: right; display: flex; gap: 5px; }
+        .btn-action { padding: 4px 8px; font-size: 12px; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .btn-edit { background-color: #f39c12; }
+        .btn-edit:hover { background-color: #d35400; }
+        .btn-del { background-color: #e74c3c; }
         .btn-del.restore { background-color: #27ae60; }
+        .deleted-item { text-decoration: line-through; opacity: 0.45; background-color: #f2f2f2; }
     </style>
 </head>
 <body>
@@ -92,6 +97,19 @@
         </div>
     </div>
 
+    <!-- 手動文字/翻譯輸入備援區 -->
+    <div class="card manual-box">
+        <strong>✏️ 手動輸入與翻譯發送（備援發送）</strong>
+        <div class="row" style="margin-top:10px;">
+            <input type="text" id="manualText" placeholder="原文 (粵語/中文)">
+            <input type="text" id="manualTrans" placeholder="翻譯內容 (英文, 可留空)">
+            <button class="btn" id="sendManualBtn" style="background-color: #8e44ad;">🚀 發送至觀眾端</button>
+        </div>
+        <div style="margin-top:6px; font-size:0.85em; color:#7f8c8d;">
+            💡 提示：若填寫「翻譯內容」，將**跳過 MyMemory**直接廣播；若僅填寫「原文」，將自動透過 MyMemory 翻譯後發送。
+        </div>
+    </div>
+
     <!-- 控制按鈕 -->
     <div class="controls">
         <button id="startBtn" class="action-btn" disabled>開始錄音翻譯</button>
@@ -101,7 +119,7 @@
 
     <div id="status" class="status">等待步驟完成...</div>
 
-    <!-- 即時狀態卡片 (含強制翻譯與重置按鈕) -->
+    <!-- 即時狀態卡片 -->
     <div class="live-card">
         <div class="live-title"><span class="live-dot"></span> 語音辨識與翻譯狀態：</div>
         <div class="live-sub-box">
@@ -148,11 +166,11 @@
         let currentTopic = "";
         let isRoomReady = false;
 
-        // --- 全域語音緩衝區與佇列系統 ---
-        let speechBuffer = "";            // 當前語音緩衝區 (持續累積 Web Speech 文字)
-        let bufferTimer = null;           // 15 秒計時器
-        let translationQueue = [];        // 待發送與翻譯的佇列
-        let isProcessingQueue = false;    // 是否正在處理隊列
+        // 全域語音緩衝區與隊列系統
+        let speechBuffer = "";            
+        let bufferTimer = null;           
+        let translationQueue = [];        
+        let isProcessingQueue = false;    
 
         // MQTT 雲端頻道建立
         document.getElementById('createRoomBtn').addEventListener('click', () => {
@@ -183,7 +201,7 @@
                 checkReadyState();
             });
 
-            mqttClient.on('error', (err) => {
+            mqttClient.on('error', () => {
                 isRoomReady = false;
                 roomStatusEl.textContent = `🔴 雲端連線失敗，請檢查網路狀態！`;
                 roomStatusEl.style.color = "#e74c3c";
@@ -233,7 +251,7 @@
             }
         }
 
-        // Web Speech API 設定
+        // Web Speech API
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         let recognition;
         let isRecording = false;
@@ -250,15 +268,11 @@
                 document.getElementById('status').classList.add('recording');
             };
 
-            recognition.onerror = (event) => {
-                console.warn('語音辨識狀態:', event.error);
-            };
+            recognition.onerror = (event) => { console.warn('語音辨識狀態:', event.error); };
 
             recognition.onend = () => {
                 if (isRecording) {
-                    setTimeout(() => {
-                        if (isRecording) try { recognition.start(); } catch(e) {}
-                    }, 300);
+                    setTimeout(() => { if (isRecording) try { recognition.start(); } catch(e) {} }, 300);
                 } else {
                     document.getElementById('status').textContent = '已停止錄音';
                     document.getElementById('status').classList.remove('recording');
@@ -271,8 +285,6 @@
                 for (let i = 0; i < event.results.length; ++i) {
                     currentSessionText += event.results[i][0].transcript;
                 }
-                
-                // 持續寫入「當前語音緩衝區」
                 if (currentSessionText.trim()) {
                     speechBuffer = currentSessionText.trim();
                     document.getElementById('liveInterim').textContent = speechBuffer;
@@ -282,55 +294,74 @@
             alert('瀏覽器不支援 Web Speech API，請改用 Chrome 或 Edge。');
         }
 
-        // --- 15 秒計時器觸發與緩衝區抓取邏輯 ---
+        // 15 秒定時觸發
         function startBufferTimer() {
             stopBufferTimer();
-            bufferTimer = setInterval(() => {
-                flushBufferToQueue();
-            }, 15000); // 每 15 秒觸發一次
+            bufferTimer = setInterval(() => { flushBufferToQueue(); }, 15000);
         }
 
         function stopBufferTimer() {
-            if (bufferTimer) {
-                clearInterval(bufferTimer);
-                bufferTimer = null;
-            }
+            if (bufferTimer) { clearInterval(bufferTimer); bufferTimer = null; }
         }
 
-        // 抓取緩衝區全部文字、立刻清空，並推入翻譯佇列
         function flushBufferToQueue() {
             const textToProcess = speechBuffer.trim();
             if (textToProcess !== "") {
-                // 1. 一次性抓取全部文字後立刻清空緩衝區
                 speechBuffer = "";
                 document.getElementById('liveInterim').textContent = "(等待發言...)";
 
-                // 重啟語音辨識引擎的內部 context（避免舊 result 重複累積）
                 if (isRecording && recognition) {
                     try { recognition.stop(); } catch(e){}
                 }
 
-                // 2. 將 15 秒積累的文字推入發送佇列
                 translationQueue.push(textToProcess);
                 processQueue();
             }
         }
 
-        // 手動「⚡ 強制翻譯並發送」按鈕
-        document.getElementById('forceTranslateBtn').addEventListener('click', () => {
-            flushBufferToQueue();
-        });
+        document.getElementById('forceTranslateBtn').addEventListener('click', () => { flushBufferToQueue(); });
 
-        // 「🔄 重置」按鈕 (清空緩衝區並重啟收音)
         document.getElementById('resetListenBtn').addEventListener('click', () => {
             speechBuffer = "";
             document.getElementById('liveInterim').textContent = '(已重置，等待發言...)';
-            if (isRecording && recognition) {
-                try { recognition.stop(); } catch(e){}
+            if (isRecording && recognition) { try { recognition.stop(); } catch(e){} }
+        });
+
+        // --- 手動輸入欄位發送邏輯 ---
+        document.getElementById('sendManualBtn').addEventListener('click', () => {
+            const manualText = document.getElementById('manualText').value.trim();
+            const manualTrans = document.getElementById('manualTrans').value.trim();
+
+            if (!manualText && !manualTrans) {
+                alert('請至少在「原文」或「翻譯內容」輸入文字！');
+                return;
+            }
+
+            // 清空輸入欄
+            document.getElementById('manualText').value = '';
+            document.getElementById('manualTrans').value = '';
+
+            if (manualTrans !== "") {
+                // 情況 A：提供了翻譯內容（無論是否填寫原文）-> 直接廣播，不經過 MyMemory
+                const textToSend = manualText || "(無原文)";
+                broadcastDirectly(textToSend, manualTrans);
+            } else {
+                // 情況 B：僅填寫原文 -> 推入隊列進行 MyMemory 翻譯
+                translationQueue.push(manualText);
+                processQueue();
             }
         });
 
-        // --- MyMemory 翻譯機制 (含 3 次重試防 Block 邏輯) ---
+        // 直接廣播 (不經 MyMemory)
+        async function broadcastDirectly(originalText, translatedText) {
+            const timeStamp = new Date().toLocaleTimeString();
+            const msgId = 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+
+            document.getElementById('liveTranslation').textContent = `${originalText} ➔ ${translatedText}`;
+            renderAndPublishMessage(msgId, timeStamp, originalText, translatedText);
+        }
+
+        // MyMemory 翻譯機制 (3次重試)
         async function translateWithRetry(text, retries = 3, delay = 1000) {
             let emailParam = currentEmail ? `&de=${encodeURIComponent(currentEmail)}` : '';
             const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=zh-HK|en${emailParam}`;
@@ -338,8 +369,7 @@
             for (let attempt = 1; attempt <= retries; attempt++) {
                 try {
                     const response = await fetch(url);
-                    if (!response.ok) throw new Error(`HTTP Error Status: ${response.status}`);
-                    
+                    if (!response.ok) throw new Error(`HTTP Status: ${response.status}`);
                     const data = await response.json();
                     const translated = data.responseData ? data.responseData.translatedText : '';
 
@@ -356,7 +386,6 @@
                 } catch (err) {
                     console.warn(`翻譯失敗，第 ${attempt} 次重試...`, err);
                     if (attempt < retries) {
-                        // 重試前等待 (指數退避: 1s, 2s, 4s...)
                         await new Promise(res => setTimeout(res, delay * Math.pow(2, attempt - 1)));
                     }
                 }
@@ -364,7 +393,7 @@
             return `${text} (⚠️ 翻譯失敗/連線逾時)`;
         }
 
-        // --- 發送佇列處理器 ---
+        // 隊列處理器
         async function processQueue() {
             if (isProcessingQueue || translationQueue.length === 0) return;
             isProcessingQueue = true;
@@ -373,38 +402,42 @@
                 const originalText = translationQueue.shift();
                 await handleTranslationAndBroadcast(originalText);
             }
-
             isProcessingQueue = false;
         }
 
-        // 執行翻譯與廣播同步
         async function handleTranslationAndBroadcast(originalText) {
             const timeStamp = new Date().toLocaleTimeString();
             const msgId = 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
 
             document.getElementById('liveTranslation').textContent = `[翻譯中]: ${originalText}...`;
-
-            // 進行 MyMemory 翻譯（保留 3 次重試防 Block）
             const translatedText = await translateWithRetry(originalText);
             document.getElementById('liveTranslation').textContent = `${originalText} ➔ ${translatedText}`;
 
+            renderAndPublishMessage(msgId, timeStamp, originalText, translatedText);
+        }
+
+        // 統一畫面渲染與 MQTT 發送
+        function renderAndPublishMessage(msgId, timeStamp, originalText, translatedText) {
             const logEntry = { id: msgId, time: timeStamp, original: originalText, english: translatedText, isDeleted: false };
             fullTranscript.push(logEntry);
 
-            // 1. 本地顯示歷史紀錄
+            // 本地渲染
             const logContentEl = document.getElementById('logContent');
             const itemDiv = document.createElement('div');
             itemDiv.className = 'log-item';
             itemDiv.id = `log-item-${msgId}`;
             itemDiv.innerHTML = `
-                <button class="btn-del" id="del-btn-${msgId}" onclick="toggleDelete('${msgId}')">❌ 撤回</button>
-                <span class="time">[${timeStamp}]</span> <strong>原文:</strong> ${originalText}<br>
-                <span class="time" style="visibility:hidden">[${timeStamp}]</span> <strong style="color:#2980b9;">英文:</strong> ${translatedText}
+                <div class="btn-group">
+                    <button class="btn-action btn-edit" onclick="editMessage('${msgId}')">✏️ 編輯</button>
+                    <button class="btn-action btn-del" id="del-btn-${msgId}" onclick="toggleDelete('${msgId}')">❌ 撤回</button>
+                </div>
+                <span class="time">[${timeStamp}]</span> <strong>原文:</strong> <span id="text-orig-${msgId}">${originalText}</span><br>
+                <span class="time" style="visibility:hidden">[${timeStamp}]</span> <strong style="color:#2980b9;">英文:</strong> <span id="text-eng-${msgId}">${translatedText}</span>
             `;
             logContentEl.appendChild(itemDiv);
             requestAnimationFrame(() => itemDiv.scrollIntoView({ behavior: 'smooth', block: 'end' }));
 
-            // 2. 廣播同步至 MQTT 雲端頻道給觀眾端
+            // MQTT 廣播
             if (mqttClient && mqttClient.connected) {
                 mqttClient.publish(currentTopic, JSON.stringify({
                     type: 'chat',
@@ -415,6 +448,40 @@
                 }));
             }
         }
+
+        // 編輯訊息邏輯
+        function editMessage(msgId) {
+            const item = fullTranscript.find(x => x.id === msgId);
+            if (!item) return;
+
+            const newOriginal = prompt("編輯原文：", item.original);
+            if (newOriginal === null) return; // 使用者取消
+
+            const newEnglish = prompt("編輯英文翻譯：", item.english);
+            if (newEnglish === null) return; // 使用者取消
+
+            // 更新內部資料
+            item.original = newOriginal.trim();
+            item.english = newEnglish.trim();
+
+            // 更新 UI 顯示
+            const origEl = document.getElementById(`text-orig-${msgId}`);
+            const engEl = document.getElementById(`text-eng-${msgId}`);
+            if (origEl) origEl.textContent = item.original;
+            if (engEl) engEl.textContent = item.english;
+
+            // MQTT 發送編輯更新至觀眾端
+            if (mqttClient && mqttClient.connected) {
+                mqttClient.publish(currentTopic, JSON.stringify({
+                    type: 'control',
+                    action: 'edit',
+                    id: msgId,
+                    original: item.original,
+                    english: item.english
+                }));
+            }
+        }
+        window.editMessage = editMessage;
 
         // 撤回 / 恢復邏輯
         function toggleDelete(msgId) {
@@ -443,7 +510,7 @@
         }
         window.toggleDelete = toggleDelete;
 
-        // 開始錄音翻譯
+        // 按鈕綁定
         document.getElementById('startBtn').addEventListener('click', () => {
             if (!recognition) return;
             isRecording = true;
@@ -456,18 +523,17 @@
             document.getElementById('liveTranslation').textContent = '(尚無翻譯)';
             
             try { recognition.start(); } catch(e){}
-            startBufferTimer(); // 啟動 15 秒計時器
+            startBufferTimer();
 
             document.getElementById('startBtn').disabled = true;
             document.getElementById('stopBtn').disabled = false;
             document.getElementById('saveBtn').disabled = true;
         });
 
-        // 停止錄音與生成紀錄
         document.getElementById('stopBtn').addEventListener('click', () => {
             isRecording = false;
             stopBufferTimer();
-            flushBufferToQueue(); // 停止時抓取並清空剩餘語音
+            flushBufferToQueue();
 
             try { recognition.stop(); } catch(e){}
             
@@ -476,7 +542,6 @@
             if (fullTranscript.length > 0) document.getElementById('saveBtn').disabled = false;
         });
 
-        // 下載紀錄
         document.getElementById('saveBtn').addEventListener('click', () => {
             let fileContent = "=== 語音即時翻譯紀錄 ===\n\n";
             fullTranscript.filter(item => !item.isDeleted).forEach(item => {
