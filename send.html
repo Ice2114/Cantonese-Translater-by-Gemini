@@ -236,37 +236,33 @@
             resetAutoTimer(); 
         });
 
-      // 🚀 使用免 Key 的 MyMemory 廣東話 (yue) 專用翻譯 API
+      // 🚀 免 API Key 的 Google 翻譯公務介面 (最簡穩定版)
         async function translateToEnglish(text) {
-            // yue 代表粵語/廣東話，en 代表英文
-            const sourceLang = 'yue';
-            const targetLang = 'en';
-            const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${sourceLang}|${targetLang}`;
+            if (!text || text.trim() === '') return '';
+
+            // 使用 GTX 介面，來源設為 zh-TW 或 zh-CN (對廣東話辨識度最佳)，目標為 en
+            const q = encodeURIComponent(text);
+            const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${q}`;
 
             try {
                 const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
                 
-                if (!response.ok) {
-                    throw new Error(`HTTP 錯誤: ${response.status}`);
-                }
-
                 const data = await response.json();
                 
-                // 解析 MyMemory 回傳結果
-                if (data && data.responseData && data.responseData.translatedText) {
-                    let translatedText = data.responseData.translatedText;
-
-                    // 防護：若 API 找不到對應翻譯，有時會回傳原本的字串，這裡做過濾
-                    if (translatedText.trim() !== '') {
-                        return translatedText;
-                    }
+                // 解析 Google 回傳陣列
+                let translatedText = '';
+                if (data && data[0]) {
+                    data[0].forEach(item => {
+                        if (item[0]) translatedText += item[0];
+                    });
                 }
                 
-                return text;
+                return translatedText || text;
 
             } catch (err) {
-                console.error("MyMemory 翻譯失敗:", err);
-                return `${text} (⚠️ 翻譯失敗: ${err.message})`;
+                console.warn("Google GTX 翻譯失敗，使用原文發送:", err);
+                return text; // 若失敗則直接傳回原文，保證系統不卡死
             }
         }
 
